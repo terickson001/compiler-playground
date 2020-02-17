@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "parse"
-import "asm/x64"
+import "emit/x64"
 
 main :: proc()
 {

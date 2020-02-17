@@ -36,6 +36,8 @@ Token_Kind :: enum
     Bit_And,
     Bit_Or,
     Xor,
+    Shl,
+    Shr,
     
     // - Logical
     Not,
@@ -43,7 +45,7 @@ Token_Kind :: enum
     Or,
 
     // - Comparison
-    EqEq,
+    CmpEq,
     NotEq,
     Lt,
     Gt,
@@ -158,7 +160,7 @@ tokenize_number :: proc(using lexer: ^Lexer) -> (token: Token)
     start := idx;
 
     base := 10;
-    if data[idx] == '0'
+    if data[idx] == '0' && idx + 1 < len(data)
     {
         idx += 1;
         switch data[idx]
@@ -186,7 +188,10 @@ tokenize_number :: proc(using lexer: ^Lexer) -> (token: Token)
     return token;
 }
 
-multi_tok :: inline proc(using lexer: ^Lexer, single : Token_Kind, double, eq, double_eq := Token_Kind.Invalid) -> (token: Token)
+multi_tok :: inline proc(using lexer: ^Lexer, single : Token_Kind,
+                         double    := Token_Kind.Invalid,
+                         eq        := Token_Kind.Invalid,
+                         double_eq := Token_Kind.Invalid) -> (token: Token)
 {
     c := data[idx];
     
@@ -212,7 +217,7 @@ multi_tok :: inline proc(using lexer: ^Lexer, single : Token_Kind, double, eq, d
         token.kind = eq;
     }
 
-    token.text = data[start:idx];
+    token.text = string(data[start:idx]);
     return token;
 }
 
@@ -249,7 +254,10 @@ lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
         
         case '(': token.kind = .Open_Paren;  idx += 1;
         case ')': token.kind = .Close_Paren; idx += 1;
-        case '=': token = multi_tok(lexer, .Eq, .EqEq);
+        case '=': token = multi_tok(lexer, .Eq, .CmpEq);
+
+        case '>': token = multi_tok(lexer, .Gt, .Shr, .GtEq);
+        case '<': token = multi_tok(lexer, .Lt, .Shl, .LtEq);
     }
 
     if token.text == "" do

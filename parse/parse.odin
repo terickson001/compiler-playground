@@ -89,7 +89,6 @@ consume :: proc(using parser: ^Parser) -> Token
     tokens.start = (tokens.start + 1) % len(tokens.buf);
     tokens.count -= 1;
     
-    // fmt.printf("CONSUME: %v\n", val);
     return val;
 }
 
@@ -131,9 +130,17 @@ precedence :: proc(token: Token) -> int
 {
     #partial switch token.kind
     {
-    case .Mul, .Quo: return 13;
-    case .Add, .Sub: return 12;    
-    case .Eq:        return 2;
+    case .Mul, .Quo, .Mod:       return 13;
+    case .Add, .Sub:             return 12;
+    case .Shl, .Shr:             return 11;
+    case .Lt, .Gt, .LtEq, .GtEq: return 10;
+    case .CmpEq, .NotEq:         return 9;
+    case .Bit_And:               return 8;
+    case .Xor:                   return 7;
+    case .Bit_Or:                return 6;
+    case .And:                   return 5;
+    case .Or:                    return 4;
+    case .Eq:                    return 2;
     }
 
     return 0;
@@ -169,8 +176,7 @@ parse_unary_expr :: proc(using parser: ^Parser) -> ^Node
 
     #partial switch peek(parser).kind
     {
-    case .Add:
-    case .Sub:
+    case .Add, .Sub, .Not, .Bit_Not:
         op := consume(parser);
         return new_clone(Node{Unary_Expr{op, parse_unary_expr(parser)}});
     case: break;
