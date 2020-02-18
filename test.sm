@@ -1,6 +1,10 @@
 
-main :: proc() {
+main :: proc()
+{
     var := 1;
-    var += 1;
-    return var;
+    if var == 2 {
+       return 0;
+    }
+
+    return 1;
 }

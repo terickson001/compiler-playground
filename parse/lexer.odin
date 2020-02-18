@@ -77,11 +77,14 @@ Token_Kind :: enum
     // Keywords
     _proc,
     _return,
+    _if,
+    _else,
+    _do,
     
     __ASSIGN_BEGIN = Eq,
     __ASSIGN_END   = XorEq,
     __KEYWORD_BEGIN = _proc,
-    __KEYWORD_END   = _return,
+    __KEYWORD_END   = _do,
 }
 
 Location :: struct

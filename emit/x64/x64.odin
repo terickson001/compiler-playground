@@ -279,11 +279,64 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
                      variables[s.lhs.variant.(parse.Ident).token.text]);
         }
         
-        case parse.Return_Stmt:
+    case parse.Return_Stmt:
+        if s.expr != nil do
+            emit_expr(emitter, s.expr);
+        
         // Epilogue
         emit_fmt(emitter, "mov  %%rbp, %%rsp\n");
         emit_fmt(emitter, "pop  %%rbp\n");
         emit_fmt(emitter, "ret\n");
+
+    case parse.If_Stmt:
+
+        _else: string;
+        if s._else != nil
+        {
+            _else = create_label(emitter, "else");
+        }
+
+        end := create_label(emitter, "end");
+        defer
+        {
+            delete(_else);
+            delete(end);
+        }
+        
+        emit_expr(emitter, s.cond);
+        emit_fmt(emitter, "cmp  $0, %%rax\n");
+        emit_fmt(emitter, "je   %s\n", _else);
+        emit_statement(emitter, s.block);
+
+        _if := s._else;
+        for _if != nil
+        {
+            emit_fmt(emitter, "jmp %s\n", end);
+            emit_label(emitter, _else);
+
+            #partial switch v in _if.variant
+            {
+            case parse.If_Stmt:
+                emit_expr(emitter, v.cond);
+                emit_fmt(emitter, "cmp  $0, %%rax\n");
+                emit_fmt(emitter, "je   %s\n", _else);
+                emit_statement(emitter, v.block);
+                _if = v._else;
+                
+            case parse.Block_Stmt:
+                emit_statement(emitter, _if);
+                _if = nil;
+            }
+
+            if _if != nil
+            {
+                delete(_else);
+                _else = create_label(emitter, "else");
+            }
+        }
+        
+        emit_label(emitter, end);
+        
     }
     
     

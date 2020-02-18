@@ -14,6 +14,7 @@ Node :: struct
         Assign_Stmt,
         Block_Stmt,
         Return_Stmt,
+        If_Stmt,
         Proc,
         Var,
         Var_List,
@@ -69,6 +70,14 @@ Return_Stmt :: struct
 {
     tok: Token,
     expr: ^Node
+}
+
+If_Stmt :: struct
+{
+    tok: Token,
+    cond: ^Node,
+    block: ^Node,
+    _else: ^Node,
 }
 
 Proc :: struct

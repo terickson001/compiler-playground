@@ -169,10 +169,18 @@ parse_block :: proc(using parser: ^Parser) -> ^Node
 {
     statements := make([dynamic]^Node);
 
-    open := expect(parser, .Open_Brace);
-    for peek(parser).kind != .Close_Brace do
+    open := expect_one(parser, .Open_Brace, ._do);
+    close: Token;
+    if open.kind == .Open_Brace
+    {
+        for peek(parser).kind != .Close_Brace do
+            append(&statements, parse_statement(parser));
+        close = expect(parser, .Close_Brace);
+    }
+    else
+    {
         append(&statements, parse_statement(parser));
-    close := expect(parser, .Close_Brace);
+    }
 
     return new_clone(Node{Block_Stmt{open, close, statements[:]}});
 }
@@ -198,6 +206,23 @@ parse_statement :: proc(using parser: ^Parser) -> ^Node
         val := parse_expr(parser);
         expect(parser, .Semi_Colon);
         return new_clone(Node{Return_Stmt{tok, val}});
+
+    case ._if:
+        tok := consume(parser);
+        cond := parse_expr(parser);
+        block := parse_block(parser);
+        _else: ^Node;
+        if allow(parser, ._else)
+        {
+            #partial switch peek(parser).kind
+            {
+            case ._if:
+                _else = parse_statement(parser);
+            case .Open_Brace, ._do:
+                _else = parse_block(parser);
+            }
+        }
+        return new_clone(Node{If_Stmt{tok, cond, block, _else}});
         
     case:
         // fmt.printf("TOKEN: %v\n", peek(parser));
