@@ -3,6 +3,7 @@ package parse
 import "core:fmt"
 import "core:os"
 import s "core:strings"
+import "core:runtime"
 
 Token_Kind :: enum
 {
@@ -12,9 +13,14 @@ Token_Kind :: enum
     Comment,
     
     // Delimiters
-    Semicolon,
+    Semi_Colon,
+    Comma,
     Open_Paren,
     Close_Paren,
+    Open_Brace,
+    Close_Brace,
+    Open_Bracket,
+    Close_Bracket,
     
     // Literals
     Ident,
@@ -30,6 +36,8 @@ Token_Kind :: enum
     Mul,
     Quo,
     Mod,
+    Inc,
+    Dec,
 
     // - Bitwise
     Bit_Not,
@@ -53,11 +61,27 @@ Token_Kind :: enum
     GtEq,
 
     // - Assignment
+    Colon,
     Eq,
+    AddEq,
+    SubEq,
+    MulEq,
+    QuoEq,
+    ModEq,
+    ShlEq,
+    ShrEq,
+    AndEq,
+    OrEq,
+    XorEq,
 
     // Keywords
-    _var,
+    _proc,
     _return,
+    
+    __ASSIGN_BEGIN = Eq,
+    __ASSIGN_END   = XorEq,
+    __KEYWORD_BEGIN = _proc,
+    __KEYWORD_END   = _return,
 }
 
 Location :: struct
@@ -201,7 +225,7 @@ multi_tok :: inline proc(using lexer: ^Lexer, single : Token_Kind,
     start := idx;
 
     idx += 1;
-    if data[idx] == c
+    if data[idx] == c && double != .Invalid
     {
         idx += 1;
         token.kind = double;
@@ -221,6 +245,12 @@ multi_tok :: inline proc(using lexer: ^Lexer, single : Token_Kind,
     return token;
 }
 
+enum_name :: proc(value: $T) -> string
+{
+    tinfo := runtime.type_info_base(type_info_of(typeid_of(T)));
+    return tinfo.variant.(runtime.Type_Info_Enum).names[value];
+}
+
 lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
 {
     if !skip_space(lexer)
@@ -236,28 +266,61 @@ lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
     
     switch data[idx]
     {
-    case '0'..'9':
-        token = tokenize_number(lexer);
+    case 'a'..'z', 'A'..'Z', '_':
+        idx += 1;
+        token.kind = .Ident;
+        for
+        {
+            switch data[idx]
+            {
+            case 'a'..'z', 'A'..'Z', '0'..'9', '_':
+                idx += 1;
+                continue;
+            }
+            break;
+        }
+        token.text = string(data[start:idx]);
+        for k in (Token_Kind.__KEYWORD_BEGIN)..(Token_Kind.__KEYWORD_END)
+        {
+            name := enum_name(Token_Kind(k));
+            if token.text == name[1:]
+            {
+                fmt.printf("KEYWORD: %v\n", k);
+                token.kind = k;
+                break;
+            }
+            
+        }
         
-        case '+': token = multi_tok(lexer, .Add);
-        case '-': token = multi_tok(lexer, .Sub);
-        case '*': token = multi_tok(lexer, .Mul);
-        case '/': token = multi_tok(lexer, .Quo);
-        case '%': token = multi_tok(lexer, .Mod);
+    case '0'..'9': token = tokenize_number(lexer);
         
-        case '~': token = multi_tok(lexer, .Bit_Not);
-        case '&': token = multi_tok(lexer, .Bit_And, .And);
-        case '|': token = multi_tok(lexer, .Bit_Or, .Or);
-        case '^': token = multi_tok(lexer, .Xor);
+    case '+': token = multi_tok(lexer, .Add, .Inc, .AddEq);
+    case '-': token = multi_tok(lexer, .Sub, .Dec, .SubEq);
+    case '*': token = multi_tok(lexer, .Mul, .Invalid, .MulEq);
+    case '/': token = multi_tok(lexer, .Quo, .Invalid, .QuoEq);
+    case '%': token = multi_tok(lexer, .Mod, .Invalid, .ModEq);
+    
+    case '~': token = multi_tok(lexer, .Bit_Not);
+    case '&': token = multi_tok(lexer, .Bit_And, .And, .AndEq);
+    case '|': token = multi_tok(lexer, .Bit_Or,  .Or,  .OrEq);
+    case '^': token = multi_tok(lexer, .Xor, .Invalid, .XorEq);
 
-        case '!': token = multi_tok(lexer, .Not, .Invalid, .NotEq);
+    case '!': token = multi_tok(lexer, .Not, .Invalid, .NotEq);
+    
+    case ';': token.kind = .Semi_Colon;    idx += 1;
+    case ',': token.kind = .Comma;         idx += 1;
+    case '(': token.kind = .Open_Paren;    idx += 1;
+    case ')': token.kind = .Close_Paren;   idx += 1;
+    case '{': token.kind = .Open_Brace;    idx += 1;
+    case '}': token.kind = .Close_Brace;   idx += 1;
+    case '[': token.kind = .Open_Bracket;  idx += 1;
+    case ']': token.kind = .Close_Bracket; idx += 1;
         
-        case '(': token.kind = .Open_Paren;  idx += 1;
-        case ')': token.kind = .Close_Paren; idx += 1;
-        case '=': token = multi_tok(lexer, .Eq, .CmpEq);
+    case '=': token = multi_tok(lexer, .Eq, .CmpEq);
+    case ':': token = multi_tok(lexer, .Colon);
 
-        case '>': token = multi_tok(lexer, .Gt, .Shr, .GtEq);
-        case '<': token = multi_tok(lexer, .Lt, .Shl, .LtEq);
+    case '>': token = multi_tok(lexer, .Gt, .Shr, .GtEq);
+    case '<': token = multi_tok(lexer, .Lt, .Shl, .LtEq);
     }
 
     if token.text == "" do

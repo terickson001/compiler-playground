@@ -6,8 +6,7 @@ import "emit/x64"
 
 main :: proc()
 {
-    nodes := parse.parse_file("test.sm");
-    parse.print_expr(nodes);
-    emitter := x64.make_emitter("test.s", nodes);
+    decls := parse.parse_file("test.sm");
+    emitter := x64.make_emitter("test.s", decls);
     x64.emit_file(&emitter);
 }
