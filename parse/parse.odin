@@ -6,7 +6,7 @@ import sconv "core:strconv"
 
 syntax_error :: proc(using token: Token, fmt_str: string, args: ..any)
 {
-    fmt.eprintf("%s(%d:%d_: \x1b[31mSYNTAX ERROR:\x1b[0m %s\n",
+    fmt.eprintf("%s(%d:%d): \x1b[31mSYNTAX ERROR:\x1b[0m %s\n",
                 loc.filename, loc.line, loc.column,
                 fmt.tprintf(fmt_str, ..args));
 }
@@ -304,6 +304,7 @@ precedence :: proc(token: Token) -> int
     case .Bit_Or:                return 6;
     case .And:                   return 5;
     case .Or:                    return 4;
+    case .Question:              return 3;
     }
 
     return 0;
@@ -322,10 +323,20 @@ parse_binary_expr :: proc(using parser: ^Parser, max_prec: int) -> ^Node
             if op_prec != prec do break;
             consume(parser);
             
-            rhs := parse_binary_expr(parser, prec +1);
-            if rhs == nil do
-                syntax_error(op, "Expected expression after binary operator");
-            expr = new_clone(Node{Binary_Expr{op, expr, rhs}});
+            if op.kind == .Question
+            {
+                then := parse_expr(parser);
+                expect(parser, .Colon);
+                _else := parse_expr(parser);
+                expr = new_clone(Node{Ternary_Expr{expr, then, _else}});
+            }
+            else
+            {
+                rhs := parse_binary_expr(parser, prec +1);
+                if rhs == nil do
+                    syntax_error(op, "Expected expression after binary operator");
+                expr = new_clone(Node{Binary_Expr{op, expr, rhs}});
+            }
         }
         prec -= 1;
     }

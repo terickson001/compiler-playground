@@ -14,6 +14,13 @@ Emitter :: struct
     label_counts: map[string]int,
     variables: map[string]int,
     stack_offset: int,
+
+    scopes: [dynamic]Scope,
+}
+
+Scope :: struct
+{
+    variables: map[string]int,
 }
 
 make_emitter :: proc(path: string, decls: []^parse.Node) -> (emitter: Emitter)
@@ -89,8 +96,6 @@ emit_expr :: proc(using emitter: ^Emitter, expr: ^parse.Node)
         }
         
     case parse.Binary_Expr:
-
-        
         #partial switch e.op.kind
         {
         case .Or:
@@ -177,6 +182,21 @@ emit_expr :: proc(using emitter: ^Emitter, expr: ^parse.Node)
             
             
         }
+
+    case parse.Ternary_Expr:
+
+        _else := create_label(emitter, "else");
+        end   := create_label(emitter, "end");
+        
+        emit_expr(emitter, e.cond);
+        emit_fmt(emitter, "cmp  $0, %%rax\n");
+        emit_fmt(emitter, "je %s\n", _else);
+        emit_expr(emitter, e.then);
+        emit_fmt(emitter, "jmp %s\n", end);
+        
+        emit_label(emitter, _else);
+        emit_expr(emitter, e._else);
+        emit_label(emitter, end);
         
     case parse.Paren_Expr:
         emit_expr(emitter, e.expr);
@@ -255,8 +275,6 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
             }
         }
         
-        if s.names[0].variant.(parse.Ident).token.text in variables do
-            parse.syntax_error(s.names[0].variant.(parse.Ident).token, "Redeclaration of variable");
         emit_fmt(emitter, "push %s\n", s.value == nil ? "$0" : "%rax");
         variables[s.names[0].variant.(parse.Ident).token.text] = stack_offset;
         stack_offset -= 8;
@@ -299,13 +317,13 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
         end := create_label(emitter, "end");
         defer
         {
-            delete(_else);
+            if s._else != nil do delete(_else);
             delete(end);
         }
         
         emit_expr(emitter, s.cond);
         emit_fmt(emitter, "cmp  $0, %%rax\n");
-        emit_fmt(emitter, "je   %s\n", _else);
+        emit_fmt(emitter, "je   %s\n", s._else != nil ? _else : end);
         emit_statement(emitter, s.block);
 
         _if := s._else;
@@ -313,7 +331,10 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
         {
             emit_fmt(emitter, "jmp %s\n", end);
             emit_label(emitter, _else);
-
+            
+            delete(_else);
+            _else = create_label(emitter, "else");
+            
             #partial switch v in _if.variant
             {
             case parse.If_Stmt:
@@ -328,15 +349,10 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
                 _if = nil;
             }
 
-            if _if != nil
-            {
-                delete(_else);
-                _else = create_label(emitter, "else");
-            }
         }
         
         emit_label(emitter, end);
-        
+        fmt.printf("LABEL COUNTS(else): %d\n", label_counts["else"]);
     }
     
     

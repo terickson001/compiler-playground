@@ -9,6 +9,7 @@ Node :: struct
 
         Unary_Expr,
         Binary_Expr,
+        Ternary_Expr,
         Paren_Expr,
 
         Assign_Stmt,
@@ -48,6 +49,13 @@ Binary_Expr :: struct
     lhs, rhs : ^Node
 }
 
+Ternary_Expr :: struct
+{
+    cond  : ^Node,
+    then  : ^Node,
+    _else : ^Node,
+}
+ 
 Paren_Expr :: struct
 {
     open, close : Token,

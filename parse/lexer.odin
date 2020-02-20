@@ -74,6 +74,7 @@ Token_Kind :: enum
     OrEq,
     XorEq,
 
+    Question,
     // Keywords
     _proc,
     _return,
@@ -307,6 +308,7 @@ lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
     case '&': token = multi_tok(lexer, .Bit_And, .And, .AndEq);
     case '|': token = multi_tok(lexer, .Bit_Or,  .Or,  .OrEq);
     case '^': token = multi_tok(lexer, .Xor, .Invalid, .XorEq);
+    case '?': token = multi_tok(lexer, .Question);
 
     case '!': token = multi_tok(lexer, .Not, .Invalid, .NotEq);
     
