@@ -1,10 +1,5 @@
 package parse
 
-Type :: struct
-{
-    size: int,
-}
-
 node_token :: proc(node: ^Node) -> Token
 {
     switch v in node.variant
