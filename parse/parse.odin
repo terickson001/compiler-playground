@@ -11,12 +11,38 @@ syntax_error :: proc(using token: Token, fmt_str: string, args: ..any)
                 fmt.tprintf(fmt_str, ..args));
 }
 
+File :: struct
+{
+    path: string,
+    using scope: ^Scope,
+}
+
+Symbol :: struct
+{
+    node: ^Node,
+    state: enum
+    {
+        Unresolved,
+        Resolving,
+        Resolved,
+    }
+}
+
+add_symbol :: proc(using parser: ^Parser, node: ^Node)
+{
+    append(&symbols, Symbol{node, .Unresolved});
+}
+
 Parser :: struct
 {
     lexer: Lexer,
     tokens: Ring(Token, 4),
 
-    decls: [dynamic]^Node,
+    files: [dynamic]File,
+    curr_file: File,
+
+    symbols: [dynamic]Symbol,
+    scope: ^Scope,
 }
 
 Ring :: struct(T: typeid, N: int)
@@ -24,6 +50,14 @@ Ring :: struct(T: typeid, N: int)
     count: int,
     start: int,
     buf: [N]T,
+}
+
+make_node :: proc(using parser: ^Parser, variant: $T) -> ^Node
+{
+    node := new(Node);
+    node.scope = parser.scope;
+    node.variant = variant;
+    return node;
 }
 
 print_expr :: proc(expr: ^Node, first := true)
@@ -135,54 +169,61 @@ peek :: proc(using parser: ^Parser, idx := 0) -> Token
 make_parser :: proc(path: string) -> (parser: Parser)
 {
     parser.lexer = make_lexer(path);
-    parser.decls = make([dynamic]^Node);
-    
+    parser.curr_file = File{path, make_scope(parser.scope)};
+    parser.scope = parser.curr_file.scope;
     return parser;
 }
 
-parse_file :: proc(path: string) -> []^Node
+parse_file :: proc(path: string) -> Parser
 {
     parser := make_parser(path);
-    return run_parser(&parser);
+    run_parser(&parser);
+    append(&parser.files, parser.curr_file);
+    return parser;
 }
 
-run_parser :: proc(using parser: ^Parser) -> []^Node
+run_parser :: proc(using parser: ^Parser)
 {
     for peek(parser).kind != .EOF do
-        append(&decls, parse_statement(parser));
-    return decls[:];
+        append(&curr_file.statements, parse_statement(parser));
 }
 
 parse_ident_list :: proc(using parser: ^Parser) -> []^Node
 {
     idents := make([dynamic]^Node);
-    append(&idents, new_clone(Node{Ident{expect(parser, .Ident)}}));
+    append(&idents, make_node(parser, Ident{expect(parser, .Ident)}));
     for peek(parser).kind == .Comma
     {
         consume(parser);
-        append(&idents, new_clone(Node{Ident{consume(parser)}}));
+        append(&idents, make_node(parser, Ident{consume(parser)}));
     }
     return idents[:];
 }
 
 parse_block :: proc(using parser: ^Parser) -> ^Node
 {
-    statements := make([dynamic]^Node);
-
+    new_scope := make_scope(scope);
+    scope = new_scope;
+    defer scope = scope.parent;
+    
     open := expect_one(parser, .Open_Brace, ._do);
     close: Token;
     if open.kind == .Open_Brace
     {
-        for peek(parser).kind != .Close_Brace do
-            append(&statements, parse_statement(parser));
+        for peek(parser).kind != .Close_Brace
+        {
+            statement := parse_statement(parser);
+            append(&scope.statements, statement);
+        }
         close = expect(parser, .Close_Brace);
     }
     else
     {
-        append(&statements, parse_statement(parser));
+        statement := parse_statement(parser);
+        append(&scope.statements, statement);
     }
-
-    return new_clone(Node{Block_Stmt{open, close, statements[:]}});
+    
+    return make_node(parser, Block_Stmt{open, close, scope});
 }
 
 parse_statement :: proc(using parser: ^Parser) -> ^Node
@@ -205,7 +246,7 @@ parse_statement :: proc(using parser: ^Parser) -> ^Node
         tok := consume(parser);
         val := parse_expr(parser);
         expect(parser, .Semi_Colon);
-        return new_clone(Node{Return_Stmt{tok, val}});
+        return make_node(parser, Return_Stmt{tok, val});
 
     case ._if:
         tok := consume(parser);
@@ -222,7 +263,7 @@ parse_statement :: proc(using parser: ^Parser) -> ^Node
                 _else = parse_block(parser);
             }
         }
-        return new_clone(Node{If_Stmt{tok, cond, block, _else}});
+        return make_node(parser, If_Stmt{tok, cond, block, _else});
         
     case:
         // fmt.printf("TOKEN: %v\n", peek(parser));
@@ -241,7 +282,7 @@ parse_assign :: proc(using parser: ^Parser) -> ^Node
                      .OrEq, .XorEq);
     rhs := parse_expr(parser);
     expect(parser, .Semi_Colon);
-    return new_clone(Node{Assign_Stmt{op, lhs, rhs}});
+    return make_node(parser, Assign_Stmt{op, lhs, rhs});
 }
 
 parse_var_decl :: proc(using parser: ^Parser) -> ^Node
@@ -274,15 +315,31 @@ parse_var_decl :: proc(using parser: ^Parser) -> ^Node
         case Proc: allow (parser, .Semi_Colon); // Optional Semi-Colon
         case:      expect(parser, .Semi_Colon);
         }
-        
-        return new_clone(Node{Var{lhs, type, rhs, is_const}});
+
+        var := make_node(parser, Var{lhs, type, rhs, is_const});
+        for name in lhs
+        {
+            if existing, found := scope.declarations[ident_str(name)]; found
+            {
+                token := node_token(name);
+                prev_token := node_token(existing);
+                fmt.eprintf("%s(%d): \e[31mERROR\e[0m: Redeclaration of %q in this scope\n",
+                            token.filename, token.line, ident_str(name));
+                fmt.eprintf("    at %s(%d)\n", prev_token.filename, prev_token.line);
+                os.exit(1);
+            }
+            scope.declarations[ident_str(name)] = name;
+        }
+        return var;
     }
     return nil;
 }
 
 parse_type :: proc(using parser: ^Parser) -> ^Node
 {
-    return new_clone(Node{Ident{expect(parser, .Ident)}});
+    ident := make_node(parser, Ident{expect(parser, .Ident)});
+    add_symbol(parser, ident);
+    return ident;
 }
 
 parse_expr :: proc(using parser: ^Parser) -> ^Node
@@ -328,14 +385,14 @@ parse_binary_expr :: proc(using parser: ^Parser, max_prec: int) -> ^Node
                 then := parse_expr(parser);
                 expect(parser, .Colon);
                 _else := parse_expr(parser);
-                expr = new_clone(Node{Ternary_Expr{expr, then, _else}});
+                expr = make_node(parser, Ternary_Expr{expr, then, _else});
             }
             else
             {
                 rhs := parse_binary_expr(parser, prec +1);
                 if rhs == nil do
                     syntax_error(op, "Expected expression after binary operator");
-                expr = new_clone(Node{Binary_Expr{op, expr, rhs}});
+                expr = make_node(parser, Binary_Expr{op, expr, rhs});
             }
         }
         prec -= 1;
@@ -352,7 +409,7 @@ parse_unary_expr :: proc(using parser: ^Parser) -> ^Node
     {
     case .Add, .Sub, .Not, .Bit_Not:
         op := consume(parser);
-        return new_clone(Node{Unary_Expr{op, parse_unary_expr(parser)}});
+        return make_node(parser, Unary_Expr{op, parse_unary_expr(parser)});
     case: break;
     }
 
@@ -369,7 +426,7 @@ parse_var_list :: proc(using parser: ^Parser) -> ^Node
         append(&vars, parse_var_decl(parser));
     }
 
-    return new_clone(Node{Var_List{vars[:]}});
+    return make_node(parser, Var_List{vars[:]});
 }
 
 parse_operand :: proc(using parser: ^Parser) -> ^Node
@@ -377,21 +434,23 @@ parse_operand :: proc(using parser: ^Parser) -> ^Node
     #partial switch peek(parser).kind
     {
     case .Ident:
-        return new_clone(Node{Ident{consume(parser)}});
+        ident := make_node(parser, Ident{consume(parser)});
+        add_symbol(parser, ident);
+        return ident;
         
     case .Integer:
         tok := expect(parser, .Integer);
-        return new_clone(Node{Literal{tok, sconv.parse_i64(tok.text)}});
+        return make_node(parser, Literal{tok, sconv.parse_i64(tok.text)});
         
     case .Float:
         tok := expect(parser, .Float);
-        return new_clone(Node{Literal{tok, sconv.parse_f64(tok.text)}});
+        return make_node(parser, Literal{tok, sconv.parse_f64(tok.text)});
 
     case .Open_Paren:
         open  := expect(parser, .Open_Paren);
         expr  := parse_expr(parser);
         close := expect(parser, .Close_Paren);
-        return new_clone(Node{Paren_Expr{open, close, expr}});
+        return make_node(parser, Paren_Expr{open, close, expr});
 
     case ._proc:
         tok := expect(parser, ._proc);
@@ -403,7 +462,8 @@ parse_operand :: proc(using parser: ^Parser) -> ^Node
         expect(parser, .Close_Paren);
         
         block := parse_block(parser);
-        return new_clone(Node{Proc{tok, params, nil, block}});
+        proc_type := make_node(parser, Proc_Type{params, nil});
+        return make_node(parser, Proc{tok, proc_type, block});
         
     case: break;
     }
