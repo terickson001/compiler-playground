@@ -17,10 +17,18 @@ File :: struct
     using scope: ^Scope,
 }
 
+Symbol_Kind :: enum u8
+{
+    Var,
+    Type,
+    Proc,
+}
+
 Symbol :: struct
 {
     node: ^Node,
-    state: enum
+    decl: ^Node,
+    state: enum u8
     {
         Unresolved,
         Resolving,
@@ -30,7 +38,9 @@ Symbol :: struct
 
 add_symbol :: proc(using parser: ^Parser, node: ^Node)
 {
-    append(&symbols, Symbol{node, .Unresolved});
+    symbol := new_clone(Symbol{node, nil, .Unresolved});
+    append(&symbols, symbol);
+    node.symbol = symbol;
 }
 
 Parser :: struct
@@ -41,7 +51,7 @@ Parser :: struct
     files: [dynamic]File,
     curr_file: File,
 
-    symbols: [dynamic]Symbol,
+    symbols: [dynamic]^Symbol,
     scope: ^Scope,
 }
 

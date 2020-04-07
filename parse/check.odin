@@ -20,9 +20,9 @@ check_scope :: proc(using checker: ^Checker, scope: ^Scope)
         check_statement(checker, stmt);
 }
 
-#partial check_statement :: proc(using checker: ^Checker, stmt: ^Node)
+check_statement :: proc(using checker: ^Checker, stmt: ^Node)
 {
-    switch v in stmt.variant
+    #partial switch v in stmt.variant
     {
     case Assign_Stmt:
         check_expr(checker, v.lhs);
@@ -32,10 +32,12 @@ check_scope :: proc(using checker: ^Checker, scope: ^Scope)
         check_scope(checker, v.scope);
         
     case Return_Stmt:
-        check_expression(checker, v.exp);
+        check_expr(checker, v.expr);
         
     case If_Stmt:
-        check_expression(checker, v.cond);
+        check_expr(checker, v.cond);
+        assert(type_is_boolean(v.cond.type), "If statement condition must be a boolean expression");
+        
         check_statement(checker, v.block);
         check_statement(checker, v._else);
 
@@ -45,19 +47,26 @@ check_scope :: proc(using checker: ^Checker, scope: ^Scope)
 
 check_declaration :: proc(using checker: ^Checker, decl: ^Node)
 {
-    
+    #partial switch v in decl.variant
+    {
+    case Var:
+        
+    }
 }
 
-check_expression :: proc(using checker: ^Checker, expr: ^Node)
+check_expr :: proc(using checker: ^Checker, expr: ^Node)
 {
-
+    #partial switch v in expr.variant
+    {
+        
+    }
 }
 
 resolve_symbols :: proc(using checker: ^Checker)
 {
     for _, i in &parser.symbols
     {
-        sym := &parser.symbols[i];
+        sym := parser.symbols[i];
         name := ident_str(sym.node);
         scope := sym.node.scope;
         for scope != nil

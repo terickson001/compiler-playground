@@ -1,6 +1,5 @@
 main :: proc()
 {
-
     var := 1;
     
     {

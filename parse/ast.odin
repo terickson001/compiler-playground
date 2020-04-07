@@ -25,7 +25,8 @@ node_token :: proc(node: ^Node) -> Token
 Node :: struct
 {
     scope: ^Scope,
-    Type: ^Type,
+    type: ^Type,
+    symbol: ^Symbol,
     
     variant: union
     {
