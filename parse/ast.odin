@@ -2,74 +2,94 @@ package parse
 
 node_token :: proc(node: ^Node) -> Token
 {
+    assert(node != nil);
     switch v in node.variant
     {
         case Ident:        return v.token;
+        
         case Literal:      return v.token;
         case Unary_Expr:   return v.op;
         case Binary_Expr:  return node_token(v.lhs);
         case Ternary_Expr: return node_token(v.cond);
         case Paren_Expr:   return v.open;
+        case Call_Expr:    return node_token(v._proc);
+        
+        case Expr_Stmt:    return node_token(v.expr);
         case Assign_Stmt:  return node_token(v.lhs);
         case Block_Stmt:   return v.open;
         case Return_Stmt:  return v.token;
+        case Jump_Stmt:    return v.token;
         case If_Stmt:      return v.token;
-        case Proc_Type:    return node_token(v.params);
-        case Proc:         return v.token;
+        case For_Stmt:     return v.token;
+        
+        case Proc_Type:    return v.token;
+        case Proc:         return node_token(v.type);
         case Var:          return node_token(v.names[0]);
-        case Var_List:     return node_token(v.list[0]);
     }
     return {};
 }
 
 Node :: struct
 {
-    scope: ^Scope,
-    type: ^Type,
+    scope:  ^Scope,
+    type:   ^Type,
     symbol: ^Symbol,
     
     variant: union
     {
         Ident,
         Literal,
-
+        
         Unary_Expr,
         Binary_Expr,
         Ternary_Expr,
         Paren_Expr,
-
+        Call_Expr,
+        
+        Expr_Stmt,
         Assign_Stmt,
         Block_Stmt,
         Return_Stmt,
+        Jump_Stmt,
         If_Stmt,
+        For_Stmt,
+        
         Proc,
         Var,
-        Var_List,
-
+        // Var_List,
+        
         Proc_Type,
     }
 }
 
-make_scope :: proc(parent: ^Scope) -> ^Scope
-{
-    return new_clone(Scope{parent, make([dynamic]^Node), make(map[string]^Node)});
-}
 
 Scope :: struct
 {
     parent: ^Scope,
     statements: [dynamic]^Node,
     declarations: map[string]^Node,
+    symbols: map[string]^Symbol,
 }
 
-ident_str :: proc(node: ^Node) -> string
+make_scope :: inline proc(parent: ^Scope) -> ^Scope
 {
-    return node.variant.(Ident).token.text;
+    return new_clone(Scope{parent, make([dynamic]^Node), make(map[string]^Node), make(map[string]^Symbol)});
 }
+
+scope_statement :: inline proc(scope: ^Scope, stmt: ^Node)
+{
+    append(&scope.statements, stmt);
+}
+
 
 Ident :: struct
 {
     token: Token,
+}
+
+ident_str :: inline proc(node: ^Node) -> string
+{
+    return node.variant.(Ident).token.text;
 }
 
 Value :: union
@@ -97,7 +117,7 @@ Unary_Expr :: struct
 Binary_Expr :: struct
 {
     op       : Token,
-    lhs, rhs : ^Node
+    lhs, rhs : ^Node,
 }
 
 Ternary_Expr :: struct
@@ -106,11 +126,24 @@ Ternary_Expr :: struct
     then  : ^Node,
     _else : ^Node,
 }
- 
+
 Paren_Expr :: struct
 {
     open, close : Token,
     expr        : ^Node,
+}
+
+Call_Expr :: struct
+{
+    _proc: ^Node,
+    args: []^Node,
+    open, close: Token,
+}
+
+Expr_Stmt :: struct
+{
+    expr: ^Node,
+    test: ^Node,
 }
 
 Assign_Stmt :: struct
@@ -121,46 +154,64 @@ Assign_Stmt :: struct
 
 Block_Stmt :: struct
 {
-    open, close  : Token,
-    using scope  : ^Scope,
+    open, close: Token,
+    using scope: ^Scope,
 }
 
 Return_Stmt :: struct
 {
     token: Token,
-    expr: ^Node
+    expr:  ^Node,
+}
+
+Jump_Stmt :: struct
+{
+    token: Token,
 }
 
 If_Stmt :: struct
 {
-    token:   Token,
+    token: Token,
     cond:  ^Node,
     block: ^Node,
     _else: ^Node,
 }
 
+For_Stmt :: struct
+{
+    token: Token,
+    scope: ^Scope,
+    init:  ^Node,
+    cond:  ^Node,
+    post:  ^Node,
+    block: ^Node,
+}
+
 Proc_Type :: struct
 {
-    params:  ^Node,
+    token: Token,
+    params:  []^Node,
     _return: ^Node,
 }
 
 Proc :: struct
 {
-    token:  Token,
-    type:   ^Node,
-    block:  ^Node,
+    scope: ^Scope,
+    type:  ^Node,
+    block: ^Node,
 }
 
 Var :: struct
 {
-    names: []^Node,
-    type: ^Node,
-    value: ^Node,
+    names:    []^Node,
+    type:     ^Node,
+    value:    ^Node,
     is_const: bool,
 }
 
+/*
 Var_List :: struct
 {
     list: []^Node,
 }
+*/

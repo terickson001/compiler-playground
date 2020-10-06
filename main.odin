@@ -3,7 +3,8 @@ package main
 import "core:fmt"
 import "core:strings"
 import "parse"
-// import "emit/x64"
+import "emit/ir"
+import "emit/x64"
 
 print_scope :: proc(scope: ^parse.Scope, level := 0)
 {
@@ -15,19 +16,25 @@ print_scope :: proc(scope: ^parse.Scope, level := 0)
                indent, level,
                indent, len(scope.statements),
                indent, len(scope.declarations));
-
+    
     for stmt in scope.statements
     {
+        assert (stmt != nil);
         #partial switch s in stmt.variant
         {
-        case parse.Var:
+            case parse.Var:
+            if s.value == nil do continue;
             if p, ok := s.value.variant.(parse.Proc); ok do
-                print_scope(p.block.variant.(parse.Block_Stmt).scope, level + 1);
+                print_scope(p.scope, level + 1);
             
-        case parse.If_Stmt:
+            case parse.If_Stmt:
             print_scope(s.block.variant.(parse.Block_Stmt).scope, level + 1);
             
-        case parse.Block_Stmt: print_scope(s.scope, level+1);
+            case parse.For_Stmt:
+            print_scope(s.scope, level + 1);
+            
+            case parse.Block_Stmt: 
+            print_scope(s.scope, level + 1);
             
         }
     }
@@ -36,17 +43,20 @@ print_scope :: proc(scope: ^parse.Scope, level := 0)
 main :: proc()
 {
     parser := parse.parse_file("test.sm");
-    fmt.printf("SYMBOLS: %#v\n", parser.symbols);
-    checker := parse.make_checker(parser);
-    // parse.resolve_symbols(&checker);
-    
-    /* emitter := x64.make_emitter("test.s", decls); */
-    /* x64.emit_file(&emitter); */
-
     for file in parser.files
     {
         fmt.printf("\nFILE: %s\n\n", file.path);
         print_scope(file.scope);
     }
+    checker := parse.make_checker(parser);
+    parse.check_file(&checker);
+    
+    emitter_ir := ir.make_emitter(parser.files[0].scope);
+    ir.emit_file(&emitter_ir);
+    
+    emitter := x64.make_emitter("test.s", parser.files[0].scope);
+    x64.emit_file(&emitter);
+    
+    
     
 }

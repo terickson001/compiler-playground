@@ -1,0 +1,36 @@
+version(1);
+project_name = "lang";
+patterns = {
+"*.odin",
+"*.bat",
+"*.sh",
+"*.4coder",
+"Makefile"
+};
+
+blacklist_patterns = {
+".*",
+};
+load_paths_base = {
+ { ".", .relative = true, .recursive = true, },
+};
+load_paths = {
+ { load_paths_base, .os = "win", },
+ { load_paths_base, .os = "linux", },
+ { load_paths_base, .os = "mac", },
+};
+
+command_list = {
+ { .name = "build",
+   .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+   .cmd = { { "odin build . -debug", .os = "win"   },
+            { "odin build . -debug", .os = "linux" },
+            { "odin build . -debug", .os = "mac"   }, }, },
+ { .name = "run",
+   .out = "*compilation*", .footer_panel = false, .save_dirty_files = false,
+   .cmd = { { "./lang.exe", .os = "win"   },
+            { "./lang && gcc test.s -g -o out && (./out; echo -e \"\nRETURN $?\n\")" , .os = "linux" },
+            { "./lang" , .os = "mac"   }, }, },
+};
+fkey_command[1] = "build";
+fkey_command[2] = "run";
