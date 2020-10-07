@@ -69,6 +69,12 @@ Label_Name :: struct
     idx: u64,
 }
 
+label_index :: inline proc(op: ^Operand) -> u64
+{
+    lbl :=  op.(Label_Name);
+    return lbl.idx;
+}
+
 /**** STATEMENTS ****/
 
 Call :: struct
@@ -168,6 +174,11 @@ ProcDef :: struct
 {
     decl: ^Operand,
     scope: ^Statement,
+    
+    //
+    
+    using flow: Flow_Graph,
+    label_to_block: map[u64]^Block,
 }
 
 ProcExtern :: struct
@@ -464,6 +475,9 @@ ir_statement :: proc(using emitter: ^Emitter, node: ^parse.Node)
         if v._else != nil do
             ir_statement(emitter, v._else);
         
+        end := ir_new_label(emitter, ".ENDIF");
+        ir_label_statement(emitter, end);
+        
         case Block_Stmt:
         stmt := ir_scope(emitter, v.scope);
         push_statement(&curr_scope.statements, stmt);
@@ -511,7 +525,11 @@ ir_proc_def :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ProcDef
     outer_block.scope = curr_scope;
     outer_block.variant = new_scope;
     
-    return ProcDef{decl, outer_block};
+    def := ProcDef{};
+    def.decl = decl;
+    def.scope = outer_block;
+    
+    return def;
 }
 
 emit_file :: proc(using emitter: ^Emitter)
@@ -527,6 +545,7 @@ emit_file :: proc(using emitter: ^Emitter)
         }
     }
     
+    ir_print(emitter);
     o := Optimizer{};
     for p in &_procs
     {

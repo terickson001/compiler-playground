@@ -10,13 +10,32 @@ ir_indent :: proc(using emitter: ^Emitter)
 
 ir_print :: proc(using emitter: ^Emitter)
 {
-    for _proc in _procs
+    for _proc in &_procs
     {
         ir_print_proc_type(emitter, _proc.decl);
         fmt.printf(" ");
-        ir_print_scope(emitter, _proc.scope);
+        if _proc.blocks.count > 0 do
+            ir_print_proc_def(emitter, &_proc);
+        else do
+            ir_print_scope(emitter, _proc.scope);
         fmt.printf("\n\n");
     }
+}
+
+ir_print_proc_def :: proc(using emitter: ^Emitter, _proc: ^ProcDef)
+{
+    fmt.printf("{{\n");
+    emitter.indent_level += 1;
+    for block := _proc.blocks.head; block != nil; block = block.next
+    {
+        for stmt := block.statements.head; stmt != nil; stmt = stmt.next
+        {
+            ir_print_statement(emitter, stmt);
+            fmt.printf("\n");
+        }
+    }
+    emitter.indent_level -= 1;
+    fmt.printf("}}\n");
 }
 
 ir_print_proc_type :: proc(using emitter: ^Emitter, op: ^Operand)
@@ -52,7 +71,6 @@ ir_print_scope :: proc(using emitter: ^Emitter, stmt: ^Statement)
         fmt.printf("\n");
     for s := scope.statements.head; s != nil; s = s.next
     {
-        
         ir_print_statement(emitter, s);
         fmt.printf("\n");
     }

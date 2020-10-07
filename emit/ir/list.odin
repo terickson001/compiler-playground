@@ -23,7 +23,6 @@ push_statement :: proc(list: ^Statement_List, tail: ^Statement)
     // list.count += 1;
 }
 
-
 remove_statement :: proc(list: ^Statement_List, stmt: ^Statement)
 {
     if stmt == list.head do list.head = stmt.next;
