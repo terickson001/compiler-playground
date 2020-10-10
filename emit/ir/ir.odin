@@ -56,10 +56,11 @@ Immediate :: struct
 
 Variable :: struct
 {
-    scope: ^Scope,
-    name:  string,
-    type:  ^Type,
+    scope:  ^Scope,
+    name:   string,
+    type:   ^Type,
     symbol: ^parse.Symbol,
+    uid: u64,
 }
 
 Label_Name :: struct
@@ -289,42 +290,6 @@ ir_lit :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ^Operand
 
 ir_var_operand :: proc(using emitter: ^Emitter, node: ^parse.Node, require_new := false) -> ^Operand
 {
-    /*
-        recent_var: ^Operand;
-        for scope := curr_scope; scope != nil; scope = scope.parent
-        {
-            for v in scope.vars
-            {
-                var := v.(Variable);
-                if var.name == parse.ident_str(node)
-                {
-                    if recent_var == nil do
-                        recent_var = v;
-                    else do
-                        recent_var = recent_var.(Variable).idx < var.idx ? v : recent_var;
-                }
-            }
-        }
-        
-        if recent_var != nil
-        {
-            
-                    if require_new
-                    {
-                        op := new(Operand);
-                        new_var := recent_var.(Variable);
-                        new_var.idx = emitter.var_counter;
-                        op^ = new_var;
-                        emitter.var_counter += 1;
-                        if require_new do
-                            append(&curr_scope.vars, op);
-                        return op;
-                    }
-            
-            return recent_var;
-        }
-    */
-    
     op := new(Operand);
     op^ = Variable{
         curr_scope, 
@@ -468,14 +433,16 @@ ir_statement :: proc(using emitter: ^Emitter, node: ^parse.Node)
         stmt := new(Statement);
         stmt.scope = curr_scope;
         stmt.variant = cond;
+        end := ir_new_label(emitter, ".ENDIF");
+        
         push_statement(&curr_scope.statements, stmt);
         ir_label_statement(emitter, cond.then);
         ir_statement(emitter, v.block);
+        ir_jump_statement(emitter, end);
         ir_label_statement(emitter, cond._else);
         if v._else != nil do
             ir_statement(emitter, v._else);
         
-        end := ir_new_label(emitter, ".ENDIF");
         ir_label_statement(emitter, end);
         
         case Block_Stmt:
@@ -485,6 +452,14 @@ ir_statement :: proc(using emitter: ^Emitter, node: ^parse.Node)
         case Expr_Stmt:
         ir_expr(emitter, v.expr);
     }
+}
+
+ir_jump_statement :: proc(using emitter: ^Emitter, label: ^Operand)
+{
+    stmt := new(Statement);
+    stmt.scope = curr_scope;
+    stmt.variant = Jump{label};
+    push_statement(&curr_scope.statements, stmt);
 }
 
 ir_scope :: proc(using emitter: ^Emitter, scope: ^parse.Scope) -> ^Statement
@@ -551,8 +526,7 @@ emit_file :: proc(using emitter: ^Emitter)
     {
         fmt.printf("CURRENT PROC: %v\n", p);
         o.current_proc = &p;
-        flatten_scopes(&o);
-        build_flow_graph(&o);
+        opt(&o);
     }
     ir_print(emitter);
 }

@@ -125,8 +125,10 @@ ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
         fmt.printf("]:");
         
         case Jump:
-        // ir_indent(emitter);
-        unreachable();
+        ir_indent(emitter);
+        fmt.printf("jump [");
+        ir_print_operand(emitter, v.label);
+        fmt.printf("]");
         
         case CJump:
         ir_indent(emitter);

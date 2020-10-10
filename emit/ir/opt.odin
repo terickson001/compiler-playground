@@ -1,5 +1,7 @@
 package ir
 
+import "tree"
+
 Optimizer :: struct
 {
     current_proc: ^ProcDef,
@@ -27,10 +29,19 @@ Block :: struct
 Flow_Graph :: struct
 {
     blocks: Block_List,
+    doms: []^Block,
+    frontiers: [][dynamic]^Block,
 }
 
 import "core:reflect"
 import "core:fmt"
+
+opt :: proc(using o: ^Optimizer)
+{
+    flatten_scopes(o);
+    build_flow_graph(o);
+    to_ssa(o);
+}
 
 // Passes
 flatten_scopes :: proc(using o: ^Optimizer)
@@ -53,6 +64,121 @@ build_flow_graph :: proc(using o: ^Optimizer)
     make_blocks(o, statements);
     trim_labels(o);
     make_edges(o);
+}
+
+to_ssa :: proc(using o: ^Optimizer)
+{
+    init_dominators(o);
+    find_frontiers(o);
+}
+
+// to_ssa subroutines
+find_frontiers :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    fg.frontiers = make([][dynamic]^Block, fg.blocks.count);
+    for b := fg.blocks.head; b != nil; b = b.next
+    {
+        if len(b.predicates) < 2 do
+            continue;
+        for edge in b.predicates
+        {
+            pred := edge.from;
+            runner := pred;
+            for runner != fg.doms[b.idx]
+            {
+                append(&fg.frontiers[b.idx], runner);
+                runner = fg.doms[runner.idx];
+            }
+        }
+    }
+}
+
+init_dominators :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    fg.doms = make([]^Block, fg.blocks.count);
+    
+    start_node := fg.blocks.head;
+    fg.doms[start_node.idx] = start_node;
+    
+    Search_State :: struct 
+    {
+        block: ^Block,
+        eidx: int,
+    };
+    
+    sp := 0;
+    stack := make([]Search_State, fg.blocks.count);
+    curr_node := start_node;
+    
+    changed := true;
+    for changed
+    {
+        changed = false;
+        eidx := 0;
+        for
+        {
+            for eidx < len(curr_node.successors)
+            {
+                block := curr_node.successors[eidx].to;
+                idom := find_idom(o, block);
+                if idom != fg.doms[block.idx]
+                {
+                    fg.doms[block.idx] = idom;
+                    changed = true;
+                }
+                
+                stack[sp] = {curr_node, eidx+1};
+                sp += 1;
+                eidx = 0;
+                curr_node = block;
+            }
+            if sp == 0 do 
+                break;
+            sp -= 1;
+            curr_node, eidx = expand_to_tuple(stack[sp]);
+        }
+    }
+    
+    fmt.printf("DOMS: %#v\n", fg.doms);
+}
+
+find_idom :: proc(using o: ^Optimizer, block: ^Block) -> ^Block
+{
+    fg := &current_proc.flow;
+    
+    new_idom: ^Block;
+    for edge in block.predicates
+    {
+        pred := edge.from;
+        if fg.doms[pred.idx] == nil do
+            continue;
+        if new_idom == nil
+        {
+            new_idom = pred;
+            continue;
+        }
+        
+        new_idom = dom_intersect(fg, pred, new_idom);
+    }
+    return new_idom;
+}
+
+dom_intersect :: proc(flow: ^Flow_Graph, a, b: ^Block) -> ^Block
+{
+    finger1 := a;
+    finger2 := b;
+    
+    for finger1 != finger2
+    {
+        for finger1.idx > finger2.idx do
+            finger1 = flow.doms[finger1.idx];
+        for finger2.idx > finger1.idx do
+            finger2 = flow.doms[finger2.idx];
+    }
+    
+    return finger1;
 }
 
 // build_flow_graph subroutines
@@ -181,7 +307,6 @@ make_blocks :: proc(using o: ^Optimizer, list: Statement_List)
     start_new_block := true;
     for stmt := list.head; stmt != nil; stmt = stmt.next
     {
-        //fmt.printf("TEST: %v\n", reflect.union_variant_typeid(stmt.variant));
         if start_new_block || statement_starts_block(stmt, prev)
         {
             start_new_block = false;
@@ -208,13 +333,15 @@ make_block_and_push :: proc(blocks: ^Block_List, stmts: Statement_List, stmt_hea
     tail := new(Block);
     tail.statements = stmts;
     tail.statements.head = stmt_head;
+    
+    if blocks.head != nil do
+        blocks.tail.statements.tail = stmt_head.prev;
     if stmt_head.prev != nil
     {
         stmt_head.prev.next = nil;
         stmt_head.prev = nil;
     }
     
-    fmt.printf("Making new block with head: %v\n", reflect.union_variant_typeid(stmt_head.variant));
     if blocks.head == nil
     {
         blocks.head = tail;

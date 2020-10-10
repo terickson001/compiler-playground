@@ -1,11 +1,13 @@
-
 main :: proc()
 {
     var := 5;
     
     
-    if var < 5 do
-        var = 3;
+    if var < 5
+    {
+        if var < 3 do
+            var = 3;
+    }
     
     
     var = square(sub(var, 3));
@@ -22,5 +24,3 @@ sub :: proc(a: i64, b: i64) -> i64
 {
     return a - b;
 }
-
-
