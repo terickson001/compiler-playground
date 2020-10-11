@@ -15,8 +15,10 @@ Statement :: struct
         Jump,
         CJump,
         Label,
-        ^Scope, 
+        ^Scope,
         ProcExtern,
+        
+        Phi
     },
     
     next: ^Statement,
@@ -180,11 +182,19 @@ ProcDef :: struct
     
     using flow: Flow_Graph,
     label_to_block: map[u64]^Block,
+    n_vars: u64,
 }
 
 ProcExtern :: struct
 {
     decl: ^Operand,
+}
+
+Phi :: struct
+{
+    // var: ^Operand,
+    symbol: ^parse.Symbol,
+    blocks: Bitmap,
 }
 
 Emitter :: struct
@@ -197,6 +207,7 @@ Emitter :: struct
     label_counts: map[string]int,
     _procs: [dynamic]ProcDef,
     curr_scope: ^Scope,
+    proc_n_vars: u64,
     var_counter: u64,
     
     indent_level: u8,
@@ -274,6 +285,7 @@ ir_proc_type :: proc(using emitter: ^Emitter, name: string, node: ^parse.Node) -
     return operand;
 }
 
+
 ir_lit :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ^Operand
 {
     lit_node := node.variant.(parse.Literal);
@@ -292,10 +304,12 @@ ir_var_operand :: proc(using emitter: ^Emitter, node: ^parse.Node, require_new :
 {
     op := new(Operand);
     op^ = Variable{
-        curr_scope, 
-        parse.ident_str(node), 
-        ir_type(emitter, node.symbol.decl),
-        node.symbol};
+        scope = curr_scope, 
+        name = parse.ident_str(node), 
+        type = ir_type(emitter, node.symbol.decl),
+        symbol = node.symbol
+    };
+    proc_n_vars = max(proc_n_vars, node.symbol.local_uid+1);
     // emitter.var_counter += 1;
     if require_new do
         append(&curr_scope.vars, op);
@@ -305,7 +319,11 @@ ir_var_operand :: proc(using emitter: ^Emitter, node: ^parse.Node, require_new :
 ir_temp_var :: proc(using emitter: ^Emitter, type: ^Type) -> ^Operand
 {
     op := new(Operand);
-    op^ = Variable{emitter.curr_scope, fmt.aprintf(".t.%d", emitter.var_counter), type, nil};
+    op^ = Variable{
+        scope=emitter.curr_scope, 
+        name=fmt.aprintf(".t.%d", emitter.var_counter), 
+        type=type
+    };
     append(&curr_scope.vars, op);
     emitter.var_counter += 1;
     return op;
@@ -503,6 +521,8 @@ ir_proc_def :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ProcDef
     def := ProcDef{};
     def.decl = decl;
     def.scope = outer_block;
+    def.n_vars = proc_n_vars;
+    proc_n_vars = 0;
     
     return def;
 }

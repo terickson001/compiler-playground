@@ -1,10 +1,17 @@
 package ir
 
-import "tree"
-
+import "../../parse"
 Optimizer :: struct
 {
     current_proc: ^ProcDef,
+    var_info: []Var_Info,
+}
+
+Var_Info :: struct
+{
+    symbol: ^parse.Symbol,
+    assigned_in: Bitmap,
+    used_in:     Bitmap,
 }
 
 Edge :: struct
@@ -70,9 +77,141 @@ to_ssa :: proc(using o: ^Optimizer)
 {
     init_dominators(o);
     find_frontiers(o);
+    fmt.printf("FRONTIERS: %#v\n", o.current_proc.flow.frontiers);
+    init_vars(o);
+    insert_phi_nodes(o);
 }
 
 // to_ssa subroutines
+insert_phi_nodes :: proc(using o: ^Optimizer)
+{
+    for info in &var_info
+    {
+        phi_candidates := propogate_frontiers(o, &info.assigned_in);
+        idx: u64;
+        ok: bool;
+        for
+        {
+            if idx, ok = bitmap_find_first(&phi_candidates); !ok do
+                break;
+            bitmap_clear(&phi_candidates, idx);
+            block: ^Block;
+            for block = current_proc.blocks.head; block.idx != idx; block = block.next {}
+            
+            phi_stmt := ir_phi(o, info, block);
+            first := first_non_label_statement(&block.statements);
+            insert_statement_before(&block.statements, first, phi_stmt);
+        }
+    }
+}
+
+ir_phi :: proc(using o: ^Optimizer, info: Var_Info, block: ^Block) -> ^Statement
+{
+    fg := &current_proc.flow;
+    phi := Phi{};
+    phi.symbol = info.symbol;
+    phi.blocks = make_bitmap(current_proc.blocks.count);
+    for e, i in block.predicates do
+        bitmap_set(&phi.blocks, e.from.idx);
+    stmt := new(Statement);
+    stmt.variant = phi;
+    return stmt;
+}
+
+propogate_frontiers :: proc(using o: ^Optimizer, defined_in: ^Bitmap) -> Bitmap
+{
+    fg := &current_proc.flow;
+    
+    runner := bitmap_clone(defined_in);
+    defer bitmap_delete(&runner);
+    propogated := make_bitmap(defined_in.bits);
+    idx: u64;
+    ok: bool;
+    for
+    {
+        if idx, ok = bitmap_find_first(&runner); !ok do
+            break;
+        fmt.printf("IDX: %d\n", idx);
+        bitmap_clear(&runner, idx);
+        for f in fg.frontiers[idx]
+        {
+            if (!bitmap_get(&propogated, f.idx))
+            {
+                bitmap_set(&runner, f.idx);
+                bitmap_set(&propogated, f.idx);
+            }
+        }
+    }
+    return propogated;
+}
+
+init_vars :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    
+    fmt.printf("ALLOCATING\n");
+    var_info = make([]Var_Info, current_proc.n_vars);
+    for v in &var_info
+    {
+        v.assigned_in = make_bitmap(fg.blocks.count);
+        v.used_in     = make_bitmap(fg.blocks.count);
+    }
+    
+    for b := fg.blocks.head; b != nil; b = b.next
+    {
+        for stmt := b.statements.head; stmt != nil; stmt = stmt.next
+        {
+            #partial switch v in stmt.variant
+            {
+                case Op:
+                if var, ok := v.dest.(Variable); ok do
+                    set_var_assigned(var, b, &var_info);
+                for o in v.operands
+                {
+                    if o == nil do continue;
+                    if var, ok := o.(Variable); ok do
+                        set_var_used(var, b, &var_info);
+                }
+                
+                case Call:
+                if var, ok := v.dest.(Variable); ok do
+                    set_var_assigned(var, b, &var_info);
+                for o in v.args
+                {
+                    if var, ok := o.(Variable); ok do
+                        set_var_used(var, b, &var_info);
+                }
+                
+                case CJump:
+                for o in v.ops
+                {
+                    if var, ok := o.(Variable); ok do
+                        set_var_used(var, b, &var_info);
+                }
+                
+                case Return:
+                if var, ok := v.var.(Variable); ok do
+                    set_var_used(var, b, &var_info);
+            }
+        }
+    }
+}
+
+set_var_assigned :: inline proc(var: Variable, block: ^Block, var_info: ^[]Var_Info)
+{
+    if var.symbol == nil do return;
+    vinfo := &var_info[var.symbol.local_uid];
+    vinfo.symbol = var.symbol;
+    bitmap_set(&vinfo.assigned_in, block.idx);
+}
+
+set_var_used :: inline proc(var: Variable, block: ^Block, var_info: ^[]Var_Info)
+{
+    if var.symbol == nil do return;
+    vinfo := &var_info[var.symbol.local_uid];
+    bitmap_set(&vinfo.used_in, block.idx);
+}
+
 find_frontiers :: proc(using o: ^Optimizer)
 {
     fg := &current_proc.flow;
@@ -87,7 +226,7 @@ find_frontiers :: proc(using o: ^Optimizer)
             runner := pred;
             for runner != fg.doms[b.idx]
             {
-                append(&fg.frontiers[b.idx], runner);
+                append(&fg.frontiers[runner.idx], b);
                 runner = fg.doms[runner.idx];
             }
         }

@@ -35,7 +35,6 @@ print_scope :: proc(scope: ^parse.Scope, level := 0)
             
             case parse.Block_Stmt: 
             print_scope(s.scope, level + 1);
-            
         }
     }
 }
@@ -56,7 +55,4 @@ main :: proc()
     
     emitter := x64.make_emitter("test.s", parser.files[0].scope);
     x64.emit_file(&emitter);
-    
-    
-    
 }

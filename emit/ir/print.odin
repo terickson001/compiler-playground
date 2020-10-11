@@ -81,7 +81,7 @@ ir_print_scope :: proc(using emitter: ^Emitter, stmt: ^Statement)
 
 ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
 {
-    #partial switch v in stmt.variant
+    #partial switch v in &stmt.variant
     {
         case Op:
         ir_indent(emitter);
@@ -141,6 +141,24 @@ ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
         fmt.printf(", ");
         ir_print_operand(emitter, v._else);
         fmt.printf("]");
+        
+        case Phi:
+        ir_indent(emitter);
+        fmt.printf("phi [!%s, [", v.symbol.name);
+        runner := bitmap_clone(&v.blocks);
+        defer bitmap_delete(&runner);
+        idx: u64;
+        ok, print_comma: bool;
+        for
+        {
+            if ok do print_comma = true;
+            if idx, ok = bitmap_find_first(&runner); !ok do
+                break;
+            if print_comma do fmt.printf(", ");
+            bitmap_clear(&runner, idx);
+            fmt.printf("BB%d", idx);
+        }
+        fmt.printf("]]");
     }
 }
 

@@ -3,14 +3,11 @@ main :: proc()
     var := 5;
     
     
-    if var < 5
-    {
+    if var < 5 do
         if var < 3 do
-            var = 3;
-    }
+        var = 3;
     
-    
-    var = square(sub(var, 3));
+    // var = square(sub(var, 3));
     
     return var;
 }

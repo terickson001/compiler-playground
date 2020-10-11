@@ -17,6 +17,8 @@ Checker :: struct
     curr_scope: ^Scope,
     builtins: map[string]^Symbol,
     flags: Checker_Flags,
+    next_local_sym_id: u64,
+    next_global_sym_id: u64,
 }
 
 Symbol_Kind :: enum u8
@@ -35,6 +37,8 @@ Symbol_Flags :: bit_set[Symbol_Flag];
 
 Symbol :: struct
 {
+    local_uid: u64,
+    global_uid: u64,
     name: string,
     decl: ^Node,
     type: ^Type,
@@ -348,6 +352,13 @@ install_symbols :: proc(using checker: ^Checker, scope: ^Scope)
             {
                 str_name := ident_str(name);
                 symbol := make_symbol(str_name, stmt);
+                symbol.global_uid = checker.next_global_sym_id;
+                checker.next_global_sym_id += 1;
+                if checker.current_proc != nil
+                {
+                    symbol.local_uid = checker.next_local_sym_id;
+                    checker.next_local_sym_id += 1;
+                }
                 name.symbol = symbol;
                 symbol.kind = .Var;
                 fmt.printf("Adding symbol: %q\n", str_name);
@@ -356,6 +367,8 @@ install_symbols :: proc(using checker: ^Checker, scope: ^Scope)
                     #partial switch v in v.value.variant
                     {
                         case Proc:
+                        checker.current_proc = stmt;
+                        checker.next_local_sym_id = 0;
                         symbol.kind = .Proc;
                         install_symbols(checker, v.scope);
                     }
@@ -371,30 +384,3 @@ check_file :: proc(using checker: ^Checker)
     install_symbols(checker, parser.files[0].scope);
     check_scope(checker, parser.files[0].scope);
 }
-
-/*
-resolve_symbols :: proc(using checker: ^Checker)
-{
-    for _, i in &parser.symbols
-    {
-        sym := parser.symbols[i];
-        name := ident_str(sym.node);
-        scope := sym.node.scope;
-        for scope != nil
-        {
-            if _, ok := scope.declarations[name]; ok
-            {
-                sym.state = .Resolved;
-                break;
-            }
-            scope = scope.parent;
-        }
-        if sym.state != .Resolved
-        {
-            token := node_token(sym.node);
-            fmt.eprintf("%s(%d): \e[31mERROR\e[0m: Unresolved identifier %q\n", token.filename, token.line, name);
-            os.exit(1);
-        }
-    }
-}
-*/

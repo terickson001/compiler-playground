@@ -56,3 +56,23 @@ insert_statements_before :: proc(dest_list: ^Statement_List, at: ^Statement, src
     src_list.head.prev = at.prev;
     at.prev = src_list.tail;
 }
+
+insert_statement_before :: proc(list: ^Statement_List, at: ^Statement, stmt: ^Statement)
+{
+    if at == list.head do
+        list.head = stmt;
+    else do
+        at.prev.next = stmt;
+    stmt.next = at;
+    at.prev = stmt;
+}
+
+first_non_label_statement :: proc(list: ^Statement_List) -> ^Statement
+{
+    for stmt := list.head; stmt != nil; stmt = stmt.next
+    {
+        if _, ok := stmt.variant.(Label); !ok do
+            return stmt;
+    }
+    return nil;
+}
