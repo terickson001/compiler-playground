@@ -1,6 +1,6 @@
 main :: proc()
 {
-    var := 5;
+    var := 4;
     
     
     if var < 5 do

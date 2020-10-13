@@ -12,6 +12,8 @@ Var_Info :: struct
     symbol: ^parse.Symbol,
     assigned_in: Bitmap,
     used_in:     Bitmap,
+    // max_version: u64,
+    curr_version: u64,
 }
 
 Edge :: struct
@@ -37,7 +39,15 @@ Flow_Graph :: struct
 {
     blocks: Block_List,
     doms: []^Block,
+    dom_tree: []Dom_Node,
     frontiers: [][dynamic]^Block,
+}
+
+Dom_Node :: struct
+{
+    father: ^Dom_Node,
+    children: [dynamic]^Dom_Node,
+    block: ^Block,
 }
 
 import "core:reflect"
@@ -76,13 +86,213 @@ build_flow_graph :: proc(using o: ^Optimizer)
 to_ssa :: proc(using o: ^Optimizer)
 {
     init_dominators(o);
+    print_dom_tree(o);
     find_frontiers(o);
-    fmt.printf("FRONTIERS: %#v\n", o.current_proc.flow.frontiers);
     init_vars(o);
     insert_phi_nodes(o);
+    // @todo: convert vars to SSA
+    convert_vars(o);
+}
+
+print_dom_tree :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    
+    for n in fg.dom_tree
+    {
+        if n.father != nil do
+            fmt.printf("BB%d -> ", n.father.block.idx);
+        fmt.printf("BB%d:\n\\---[", n.block.idx);
+        for c, i in n.children
+        {
+            if i != 0 do
+                fmt.printf(", ");
+            fmt.printf("BB%d", c.block.idx);
+        }
+        fmt.printf("]\n");
+    }
 }
 
 // to_ssa subroutines
+convert_vars :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    
+    vars_on_exit := make([][]Var_Info, fg.blocks.count);
+    max_version := make([]u64, len(o.var_info));
+    
+    it, node := first_dom_node(fg);
+    for node != nil
+    {
+        for p in node.block.predicates
+        {
+            if vars_on_exit[p.from.idx] != nil do
+                copy(var_info, vars_on_exit[p.from.idx]);
+        }
+        
+        for stmt := node.block.statements.head; stmt != nil; stmt = stmt.next
+        {
+            #partial switch v in &stmt.variant
+            {
+                case Op:
+                for op in v.operands
+                {
+                    if op == nil do continue;
+                    #partial switch var in op
+                    {
+                        case Variable: update_var_use(o, &var);
+                    }
+                }
+                #partial switch var in v.dest
+                {
+                    case Variable: add_new_var_version(o, &var, max_version);
+                }
+                
+                case Call:
+                for op in v.args
+                {
+                    #partial switch var in op
+                    {
+                        case Variable: update_var_use(o, &var);
+                    }
+                }
+                #partial switch var in v.dest
+                {
+                    case Variable: add_new_var_version(o, &var, max_version);
+                }
+                
+                case CJump:
+                for op in &v.ops
+                {
+                    #partial switch var in op
+                    {
+                        case Variable: update_var_use(o, &var);
+                    }
+                }
+                
+                case Return:
+                #partial switch var in v.var
+                {
+                    case Variable: update_var_use(o, &var);
+                }
+                
+                case Phi:
+                #partial switch var in v.dest
+                {
+                    case Variable: add_new_var_version(o, &var, max_version);
+                }
+            }
+        }
+        
+        vars_on_exit[node.block.idx] = make([]Var_Info, len(o.var_info));
+        copy(vars_on_exit[node.block.idx], o.var_info);
+        
+        node = next_dom_node(&it, node);
+    }
+    
+    it, node = first_dom_node(fg);
+    for node != nil
+    {
+        
+        for stmt := node.block.statements.head; stmt != nil; stmt = stmt.next
+        {
+            #partial switch v in stmt.variant
+            {
+                case Phi:
+                for c, i in v.choices
+                {
+                    pred_idx := node.block.predicates[i].from.idx;
+                    v.choices[i] = ir_var_operand(nil, v.symbol);
+                    var := &v.choices[i].(Variable);
+                    var.version = vars_on_exit[pred_idx][v.symbol.local_uid].curr_version;
+                }
+            }
+        }
+        node = next_dom_node(&it, node);
+    }
+}
+
+update_var_use :: proc(using o: ^Optimizer, var: ^Variable)
+{
+    if var.symbol == nil do return;
+    info := &o.var_info[var.symbol.local_uid];
+    var.version = info.curr_version;
+}
+
+add_new_var_version :: proc(using o: ^Optimizer, var: ^Variable, max_version: []u64)
+{
+    if var.symbol == nil do return;
+    info := &o.var_info[var.symbol.local_uid];
+    var.version = max_version[var.symbol.local_uid];
+    fmt.printf("SETTING VERSION OF %q TO %d\n", var.name, var.version); 
+    max_version[var.symbol.local_uid] += 1;
+    info.curr_version = var.version;
+}
+
+first_dom_node :: proc(fg: ^Flow_Graph) -> (Dom_Iterator_State, ^Dom_Node)
+{
+    state := Dom_Iterator_State{};
+    state.stack = make([]^Dom_Node, len(fg.dom_tree)*10);
+    node := &fg.dom_tree[0];
+    return state, node;
+}
+
+next_dom_node :: proc(using state: ^Dom_Iterator_State, node: ^Dom_Node) -> ^Dom_Node
+{
+    for child in node.children
+    {
+        stack[sp] = child;
+        sp += 1;
+    }
+    
+    if sp > 0
+    {
+        sp -= 1;
+        ret := stack[sp];
+        return ret;
+    }
+    else
+    {
+        delete(stack);
+        return nil;
+    }
+}
+
+Dom_Iterator_State :: struct
+{
+    stack: []^Dom_Node,
+    sp: u32,
+}
+
+first_statement :: inline proc(fg: ^Flow_Graph) -> (^Block, ^Statement)
+{
+    return fg.blocks.head, fg.blocks.head.statements.head;
+}
+
+next_statement :: proc(block: ^Block, stmt: ^Statement) -> (^Block, ^Statement)
+{
+    block_out := block;
+    stmt_out := stmt.next;
+    if stmt_out == nil
+    {
+        block_out = block.next;
+        if block_out == nil do 
+            return nil, nil;
+        stmt_out = block_out.statements.head;
+    }
+    
+    return block_out, stmt_out;
+}
+
+next_block :: proc(block: ^Block, stmt: ^Statement) -> (^Block, ^Statement)
+{
+    block_out := block.next;
+    if block_out == nil do
+        return nil, nil;
+    stmt_out := block_out.statements.head;
+    return block_out, stmt_out;
+}
+
 insert_phi_nodes :: proc(using o: ^Optimizer)
 {
     for info in &var_info
@@ -110,9 +320,8 @@ ir_phi :: proc(using o: ^Optimizer, info: Var_Info, block: ^Block) -> ^Statement
     fg := &current_proc.flow;
     phi := Phi{};
     phi.symbol = info.symbol;
-    phi.blocks = make_bitmap(current_proc.blocks.count);
-    for e, i in block.predicates do
-        bitmap_set(&phi.blocks, e.from.idx);
+    phi.dest = ir_var_operand(nil, info.symbol);
+    phi.choices = make([]^Operand, len(block.predicates));
     stmt := new(Statement);
     stmt.variant = phi;
     return stmt;
@@ -131,7 +340,6 @@ propogate_frontiers :: proc(using o: ^Optimizer, defined_in: ^Bitmap) -> Bitmap
     {
         if idx, ok = bitmap_find_first(&runner); !ok do
             break;
-        fmt.printf("IDX: %d\n", idx);
         bitmap_clear(&runner, idx);
         for f in fg.frontiers[idx]
         {
@@ -149,7 +357,6 @@ init_vars :: proc(using o: ^Optimizer)
 {
     fg := &current_proc.flow;
     
-    fmt.printf("ALLOCATING\n");
     var_info = make([]Var_Info, current_proc.n_vars);
     for v in &var_info
     {
@@ -280,7 +487,19 @@ init_dominators :: proc(using o: ^Optimizer)
         }
     }
     
-    fmt.printf("DOMS: %#v\n", fg.doms);
+    fg.dom_tree = make([]Dom_Node, fg.blocks.count);
+    for b := fg.blocks.head; b != nil; b = b.next
+    {
+        node := &fg.dom_tree[b.idx];
+        node.block = b;
+        
+        if b.idx != 0
+        {
+            father := &fg.dom_tree[fg.doms[b.idx].idx];
+            node.father = father;
+            append(&father.children, node);
+        }
+    }
 }
 
 find_idom :: proc(using o: ^Optimizer, block: ^Block) -> ^Block

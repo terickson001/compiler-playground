@@ -144,19 +144,14 @@ ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
         
         case Phi:
         ir_indent(emitter);
-        fmt.printf("phi [!%s, [", v.symbol.name);
-        runner := bitmap_clone(&v.blocks);
-        defer bitmap_delete(&runner);
-        idx: u64;
-        ok, print_comma: bool;
-        for
+        fmt.printf("phi [");
+        ir_print_operand(emitter, v.dest);
+        fmt.printf(", [");
+        for c, i in v.choices
         {
-            if ok do print_comma = true;
-            if idx, ok = bitmap_find_first(&runner); !ok do
-                break;
-            if print_comma do fmt.printf(", ");
-            bitmap_clear(&runner, idx);
-            fmt.printf("BB%d", idx);
+            if i != 0 do 
+                fmt.printf(", ");
+            ir_print_operand(emitter, c);
         }
         fmt.printf("]]");
     }
@@ -185,7 +180,7 @@ ir_print_var :: proc(using emitter: ^Emitter, op: ^Operand)
     if op == nil do return;
     var := op.(Variable);
     ir_print_type(emitter, var.type);
-    fmt.printf(" !%s", var.name);
+    fmt.printf(" !%s.%d", var.name, var.version);
 }
 
 ir_print_type :: proc(using emitter: ^Emitter, type: ^Type)

@@ -62,7 +62,9 @@ Variable :: struct
     name:   string,
     type:   ^Type,
     symbol: ^parse.Symbol,
-    uid: u64,
+    
+    in_ssa: bool,
+    version: u64,
 }
 
 Label_Name :: struct
@@ -192,9 +194,10 @@ ProcExtern :: struct
 
 Phi :: struct
 {
-    // var: ^Operand,
     symbol: ^parse.Symbol,
-    blocks: Bitmap,
+    dest: ^Operand,
+    choices: []^Operand,
+    // blocks: Bitmap,
 }
 
 Emitter :: struct
@@ -264,7 +267,7 @@ ir_params :: proc(using emitter: ^Emitter, nodes: []^parse.Node) -> []^Operand
     {
         var := n.variant.(parse.Var);
         for name in var.names do
-            append(&ops, ir_var_operand(emitter, name));
+            append(&ops, ir_var_operand(emitter, name.symbol));
     }
     
     return ops[:];
@@ -300,19 +303,22 @@ ir_lit :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ^Operand
     return op;
 }
 
-ir_var_operand :: proc(using emitter: ^Emitter, node: ^parse.Node, require_new := false) -> ^Operand
+ir_var_operand :: proc(using emitter: ^Emitter, symbol: ^parse.Symbol, require_new := false) -> ^Operand
 {
+    scope: ^Scope;
+    if emitter != nil do
+        scope = emitter.curr_scope;
     op := new(Operand);
     op^ = Variable{
-        scope = curr_scope, 
-        name = parse.ident_str(node), 
-        type = ir_type(emitter, node.symbol.decl),
-        symbol = node.symbol
+        scope = scope, 
+        name = symbol.name, 
+        type = ir_type(emitter, symbol.decl),
+        symbol = symbol
     };
-    proc_n_vars = max(proc_n_vars, node.symbol.local_uid+1);
-    // emitter.var_counter += 1;
-    if require_new do
-        append(&curr_scope.vars, op);
+    if emitter != nil do
+        proc_n_vars = max(proc_n_vars, symbol.local_uid+1);
+    if require_new && scope != nil do
+        append(&scope.vars, op);
     return op;
 }
 
@@ -355,7 +361,7 @@ ir_expr :: proc(using emitter: ^Emitter, node: ^parse.Node, dest: ^Operand = nil
             stmt.variant = Op{.Identity, dest, {op, nil}};
         else do 
             return op;
-        case Ident: return ir_var_operand(emitter, node);
+        case Ident: return ir_var_operand(emitter, node.symbol);
         
         case Unary_Expr:
         operand := ir_expr(emitter, v.expr);
@@ -432,12 +438,12 @@ ir_statement :: proc(using emitter: ^Emitter, node: ^parse.Node)
         case Var:
         for name in v.names
         {
-            dest := ir_var_operand(emitter, name, true);
+            dest := ir_var_operand(emitter, name.symbol, true);
             src := ir_expr(emitter, v.value, dest);
         }
         
         case Assign_Stmt:
-        dest := ir_var_operand(emitter, v.lhs, true);
+        dest := ir_var_operand(emitter, v.lhs.symbol, true);
         src  := ir_expr(emitter, v.rhs, dest);
         
         case Return_Stmt:
