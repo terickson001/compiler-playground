@@ -24,8 +24,10 @@ print_scope :: proc(scope: ^parse.Scope, level := 0)
         {
             case parse.Var:
             if s.value == nil do continue;
-            if p, ok := s.value.variant.(parse.Proc); ok do
+            if p, ok := s.value.variant.(parse.Proc); ok 
+            {
                 print_scope(p.scope, level + 1);
+            }
             
             case parse.If_Stmt:
             print_scope(s.block.variant.(parse.Block_Stmt).scope, level + 1);

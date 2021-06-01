@@ -55,10 +55,14 @@ emit_label :: proc(using emitter: ^Emitter, label: string)
 create_label :: proc(using emitter: ^Emitter, label: string) -> string
 {
     count, ok := label_counts[label];
-    if !ok do
+    if !ok 
+    {
         label_counts[label] = 1;
-    else do
+    }
+    else 
+    {
         label_counts[label] += 1;
+    }
     
     return strings.clone(fmt.tprintf("_%s%d", label, count));
 }
@@ -334,8 +338,10 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
         stack_offset -= 8;
         
         case parse.Block_Stmt:
-        for stmt in s.statements do
+        for stmt in s.statements 
+        {
             emit_statement(emitter, stmt);
+        }
         
         case parse.Expr_Stmt:
         emit_expr(emitter, s.expr);
@@ -355,8 +361,10 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
         }
         
         case parse.Return_Stmt:
-        if s.expr != nil do
+        if s.expr != nil 
+        {
             emit_expr(emitter, s.expr);
+        }
         
         // Epilogue
         emit_fmt(emitter, "mov  %%rbp, %%rsp\n");
@@ -450,8 +458,10 @@ emit_statement :: proc(using emitter: ^Emitter, stmt: ^parse.Node)
 emit_scope :: proc(using emitter: ^Emitter, scope: ^parse.Scope)
 {
     // prev_stack_offset := stack_offset;
-    for stmt in scope.statements do
+    for stmt in scope.statements 
+    {
         emit_statement(emitter, stmt);
+    }
 }
 
 emit_file :: proc(using emitter: ^Emitter)

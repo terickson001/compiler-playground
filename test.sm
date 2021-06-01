@@ -2,9 +2,7 @@ main :: proc()
 {
     var := 4;
     
-    
     if var < 5 do
-        if var < 3 do
         var = 3;
     
     // var = square(sub(var, 3));

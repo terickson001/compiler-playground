@@ -105,10 +105,14 @@ Location :: struct
 
 loc_cmp :: proc(a, b: Location) -> int
 {
-    if a.filename != b.filename do
+    if a.filename != b.filename 
+    {
         return min(int);
-    if a.line != b.line do
+    }
+    if a.line != b.line 
+    {
         return b.line - a.line;
+    }
     return b.column - a.column;
 }
 
@@ -160,15 +164,23 @@ skip_space :: proc(using lexer: ^Lexer) -> bool
 {
     for
     {
-        if idx >= len(data) do
+        if idx >= len(data) 
+        {
             return false;
+        }
         
-        if s.is_space(rune(data[idx])) && data[idx] != '\n' do
+        if s.is_space(rune(data[idx])) && data[idx] != '\n' 
+        {
             idx+=1;
-        else if data[idx] == '\n' do
+        }
+        else if data[idx] == '\n' 
+        {
             try_increment_line(lexer);
-        else do
+        }
+        else 
+        {
             return true;
+        }
     }
     return true;
 }
@@ -222,8 +234,10 @@ tokenize_number :: proc(using lexer: ^Lexer) -> (token: Token)
     {
         if data[idx] == '.'
         {
-            if token.kind == .Float do
+            if token.kind == .Float 
+            {
                 lex_error(lexer, "Multiple '.' in constant");
+            }
             token.kind = .Float;
         }
         
@@ -337,16 +351,20 @@ lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
             idx += 1;
             start = idx;
             token.kind = .Comment;
-            for idx < len(data) && data[idx] != '\n' do
+            for idx < len(data) && data[idx] != '\n' 
+            {
                 idx += 1;
+            }
         }
         else if data[idx] == '*'
         {
             idx += 1;
             start = idx;
             token.kind = .Comment;
-            for idx+1 < len(data) && string(data[idx:idx+2]) != "*/" do
+            for idx+1 < len(data) && string(data[idx:idx+2]) != "*/" 
+            {
                 idx += 1;
+            }
             token.text = string(data[start:idx]);
             if idx+1 < len(data) do idx += 2;
         }
@@ -385,8 +403,10 @@ lex_token :: proc(using lexer: ^Lexer) -> (token: Token, ok: bool)
         case '<': token = multi_tok(lexer, .Lt, .Shl, .LtEq);
     }
     
-    if token.text == "" do
+    if token.text == "" 
+    {
         token.text = string(data[start:idx]);
+    }
     
     return token, token.kind != .Invalid;
 }

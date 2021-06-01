@@ -94,8 +94,10 @@ check_scope :: proc(using checker: ^Checker, scope: ^Scope)
     prev_scope := checker.curr_scope;
     defer checker.curr_scope = prev_scope;
     checker.curr_scope = scope;
-    for stmt in scope.statements do
+    for stmt in scope.statements 
+    {
         check_statement(checker, stmt);
+    }
 }
 
 check_statement :: proc(using checker: ^Checker, stmt: ^Node)
@@ -121,12 +123,16 @@ check_statement :: proc(using checker: ^Checker, stmt: ^Node)
         #partial switch v.token.kind
         {
             case ._break:
-            if .Allow_Break not_in flags do
+            if .Allow_Break not_in flags 
+            {
                 checker_error(stmt, "'break' not allowed in this scope");
+            }
             
             case ._continue:
-            if .Allow_Continue not_in flags do
+            if .Allow_Continue not_in flags 
+            {
                 checker_error(stmt, "'continue' not allowed in this scope");
+            }
         }
         
         case If_Stmt:
@@ -134,8 +140,10 @@ check_statement :: proc(using checker: ^Checker, stmt: ^Node)
         assert(type_is_boolean(v.cond.type), "If statement condition must be a boolean expression");
         
         check_statement(checker, v.block);
-        if v._else!= nil do
+        if v._else!= nil 
+        {
             check_statement(checker, v._else);
+        }
         
         case For_Stmt:
         // Enter Scope
@@ -168,19 +176,27 @@ check_declaration :: proc(using checker: ^Checker, decl: ^Node)
     {
         case Var:
         assert(v.type != nil || v.value != nil, "Variable declaration must have a type or value");
-        if v.type != nil do
+        if v.type != nil 
+        {
             check_type(checker, v.type);
-        if v.value != nil do
+        }
+        if v.value != nil 
+        {
             check_expr(checker, v.value);
-        if v.type != nil && v.value != nil do
+        }
+        if v.type != nil && v.value != nil 
+        {
             assert(v.type.type == v.value.type);
+        }
         if v.type == nil do v.type = v.value;
         decl.type = v.type.type;
         
         if v.value != nil
         {
-            if _proc, ok := v.value.variant.(Proc); ok do
+            if _proc, ok := v.value.variant.(Proc); ok 
+            {
                 check_statement(checker, _proc.block);
+            }
         }
         
         case: 
@@ -241,10 +257,14 @@ check_expr :: proc(using checker: ^Checker, expr: ^Node)
         
         case Unary_Expr:
         check_expr(checker, v.expr);
-        if v.op.kind == .Not do
+        if v.op.kind == .Not 
+        {
             expr.type = &type__bool;
-        else do
+        }
+        else 
+        {
             expr.type = v.expr.type;
+        }
         
         case Binary_Expr:
         check_expr(checker, v.lhs);
@@ -278,8 +298,10 @@ check_expr :: proc(using checker: ^Checker, expr: ^Node)
         
         case Call_Expr:
         symbol := check_name(checker, v._proc);
-        for arg in v.args do
+        for arg in v.args 
+        {
             check_expr(checker, arg);
+        }
         // @todo(tyler): Check parameter types
         expr.type = symbol.type.variant.(Type_Proc)._return;
         
@@ -289,8 +311,10 @@ check_expr :: proc(using checker: ^Checker, expr: ^Node)
 check_name :: proc(using checker: ^Checker, ident: ^Node) -> ^Symbol
 {
     symbol := lookup_symbol(checker, checker.curr_scope, ident);
-    if .Builtin not_in symbol.flags do
+    if .Builtin not_in symbol.flags 
+    {
         resolve_symbol(checker, symbol);
+    }
     ident.symbol = symbol;
     return symbol;
 }
@@ -305,13 +329,17 @@ lookup_symbol :: proc(using checker: ^Checker, scope: ^Scope, ident: ^Node) -> ^
             sym_loc := node_token(symbol.decl).loc;
             ident_loc := node_token(ident).loc;
             
-            if curr.parent != nil && loc_cmp(sym_loc, ident_loc) < 0 do
+            if curr.parent != nil && loc_cmp(sym_loc, ident_loc) < 0 
+            {
                 continue;
+            }
             return symbol;
         }
     }
-    if symbol, ok := checker.builtins[name]; ok do
+    if symbol, ok := checker.builtins[name]; ok 
+    {
         return symbol;
+    }
     fmt.eprintf("Symbol %q not found\n", name);
     os.exit(1);
 }
@@ -361,7 +389,7 @@ install_symbols :: proc(using checker: ^Checker, scope: ^Scope)
                 }
                 name.symbol = symbol;
                 symbol.kind = .Var;
-                fmt.printf("Adding symbol: %q\n", str_name);
+                fmt.printf("Adding symbol: %q(%d:%d)\n", str_name, symbol.global_uid, symbol.local_uid);
                 if v.value != nil
                 {
                     #partial switch v in v.value.variant

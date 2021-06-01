@@ -167,10 +167,14 @@ hash_multi :: proc(args: ..any) -> u64
             new_hash = hash.crc64(bytes);
         }
         
-        if i != 0 do
+        if i != 0 
+        {
             res = hash_mix(res, new_hash);
-        else do
+        }
+        else 
+        {
             res = new_hash;
+        }
     }
     
     return res;
@@ -186,8 +190,10 @@ get_cached_type :: proc(type_map: map[u64]^Type, args: ..any) -> ^Type
 {
     key := hash_multi(args);
     type, ok := type_map[key];
-    if !ok do
+    if !ok 
+    {
         return nil;
+    }
     return type;
 }
 
@@ -203,8 +209,10 @@ make_type :: proc(variant: $T) -> ^Type
 proc_type :: proc(params: []^Type, ret: ^Type) -> ^Type
 {
     type := get_cached_type(cached_proc_types, params, ret);
-    if type != nil do
+    if type != nil 
+    {
         return type;
+    }
     
     type = make_type(Type_Proc{params, ret});
     type.size = 8; // @hack(tyler): Actually determine pointer size

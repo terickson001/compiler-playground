@@ -13,8 +13,10 @@ rotate_left :: proc(x: ^Node($T))
     if r != nil
     {
         x.right = r.left;
-        if r.left != nil do
+        if r.left != nil 
+        {
             r.left.parent = x;
+        }
         r.parent = x.parent;
         r.left = x;
     }
@@ -23,8 +25,10 @@ rotate_left :: proc(x: ^Node($T))
     {
         if x.parent.left == x do 
             x.parent.left = r;
-        else do
+        else 
+        {
             x.parent.right = r;
+        }
     }
     x.parent = r;
 }
@@ -35,8 +39,10 @@ rotate_right :: proc(x: ^Node($T))
     if l != nil
     {
         x.left = l.right;
-        if l.right != nil do
+        if l.right != nil 
+        {
             l.right.parent = x;
+        }
         l.parent = x.parent;
         l.right = x;
     }
@@ -45,8 +51,10 @@ rotate_right :: proc(x: ^Node($T))
     {
         if x.parent.left == x do 
             x.parent.left = l;
-        else do
+        else 
+        {
             x.parent.right = l;
+        }
     }
     x.parent = l;
 }

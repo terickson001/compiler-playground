@@ -266,8 +266,10 @@ ir_params :: proc(using emitter: ^Emitter, nodes: []^parse.Node) -> []^Operand
     for n in nodes
     {
         var := n.variant.(parse.Var);
-        for name in var.names do
+        for name in var.names 
+        {
             append(&ops, ir_var_operand(emitter, name.symbol));
+        }
     }
     
     return ops[:];
@@ -276,8 +278,10 @@ ir_params :: proc(using emitter: ^Emitter, nodes: []^parse.Node) -> []^Operand
 @static cached_proc_types: map[string]^Operand;
 ir_proc_type :: proc(using emitter: ^Emitter, name: string, node: ^parse.Node) -> ^Operand
 {
-    if proc_type, ok := cached_proc_types[name]; ok do
+    if proc_type, ok := cached_proc_types[name]; ok 
+    {
         return proc_type;
+    }
     
     type    := node.variant.(parse.Proc_Type);
     params  := ir_params(emitter, type.params);
@@ -306,8 +310,10 @@ ir_lit :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ^Operand
 ir_var_operand :: proc(using emitter: ^Emitter, symbol: ^parse.Symbol, require_new := false) -> ^Operand
 {
     scope: ^Scope;
-    if emitter != nil do
+    if emitter != nil 
+    {
         scope = emitter.curr_scope;
+    }
     op := new(Operand);
     op^ = Variable{
         scope = scope, 
@@ -315,10 +321,14 @@ ir_var_operand :: proc(using emitter: ^Emitter, symbol: ^parse.Symbol, require_n
         type = ir_type(emitter, symbol.decl),
         symbol = symbol
     };
-    if emitter != nil do
+    if emitter != nil 
+    {
         proc_n_vars = max(proc_n_vars, symbol.local_uid+1);
-    if require_new && scope != nil do
+    }
+    if require_new && scope != nil 
+    {
         append(&scope.vars, op);
+    }
     return op;
 }
 
@@ -357,23 +367,31 @@ ir_expr :: proc(using emitter: ^Emitter, node: ^parse.Node, dest: ^Operand = nil
     {
         case Literal: 
         op := ir_lit(emitter, node);
-        if dest != nil do
+        if dest != nil 
+        {
             stmt.variant = Op{.Identity, dest, {op, nil}};
-        else do 
+        }
+        else
+        {
             return op;
+        }
         case Ident: return ir_var_operand(emitter, node.symbol);
         
         case Unary_Expr:
         operand := ir_expr(emitter, v.expr);
-        if dest == nil do
+        if dest == nil 
+        {
             dest = ir_temp_var(emitter, ir_type(emitter, node));
+        }
         stmt.variant = Op{ir_op_kind(v.op, true), dest, {operand, nil}};
         
         case Binary_Expr:
         lhs := ir_expr(emitter, v.lhs);
         rhs := ir_expr(emitter, v.rhs);
-        if dest == nil do
+        if dest == nil 
+        {
             dest = ir_temp_var(emitter, ir_type(emitter, node));
+        }
         stmt.variant = Op{ir_op_kind(v.op), dest, {lhs, rhs}};
         
         case Paren_Expr:
@@ -383,10 +401,14 @@ ir_expr :: proc(using emitter: ^Emitter, node: ^parse.Node, dest: ^Operand = nil
         case Call_Expr:
         proc_type := ir_proc_type(emitter, ident_str(v._proc), v._proc.symbol.decl.variant.(Var).value.variant.(Proc).type);
         args := make([]^Operand, len(proc_type.(Procedure).params));
-        for arg, i in v.args do
+        for arg, i in v.args 
+        {
             args[i] = ir_arg(emitter, arg);
-        if dest == nil do
+        }
+        if dest == nil 
+        {
             dest = ir_temp_var(emitter, ir_type(emitter, node));
+        }
         stmt.variant = Call{proc_type, args, dest};
     }
     push_statement(&curr_scope.statements, new_clone(stmt));
@@ -464,8 +486,10 @@ ir_statement :: proc(using emitter: ^Emitter, node: ^parse.Node)
         ir_statement(emitter, v.block);
         ir_jump_statement(emitter, end);
         ir_label_statement(emitter, cond._else);
-        if v._else != nil do
+        if v._else != nil 
+        {
             ir_statement(emitter, v._else);
+        }
         
         ir_label_statement(emitter, end);
         
@@ -490,8 +514,10 @@ ir_scope :: proc(using emitter: ^Emitter, scope: ^parse.Scope) -> ^Statement
 {
     new_scope := make_scope(curr_scope);
     curr_scope = new_scope;
-    for stmt in scope.statements do
+    for stmt in scope.statements 
+    {
         ir_statement(emitter, stmt);
+    }
     curr_scope = curr_scope.parent;
     stmt := new(Statement);
     stmt.scope = curr_scope;
@@ -512,8 +538,10 @@ ir_proc_def :: proc(using emitter: ^Emitter, node: ^parse.Node) -> ProcDef
     #partial switch v in decl
     {
         case Procedure:
-        for p in v.params do
+        for p in v.params 
+        {
             append(&curr_scope.vars, p);
+        }
         case: unreachable();
     }
     block := ir_scope(emitter, _proc.block.variant.(parse.Block_Stmt).scope);
@@ -541,8 +569,10 @@ emit_file :: proc(using emitter: ^Emitter)
         {
             case parse.Var:
             if v.value == nil do continue;
-            if _, ok := v.value.variant.(parse.Proc); ok do
+            if _, ok := v.value.variant.(parse.Proc); ok 
+            {
                 append(&_procs, ir_proc_def(emitter, stmt));
+            }
         }
     }
     

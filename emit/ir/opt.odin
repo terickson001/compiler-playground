@@ -1,6 +1,12 @@
 package ir
 
+import "core:reflect"
+import "core:fmt"
+
 import "../../parse"
+
+// @todo: Migrate to Lengauer-Tarjan dom tree generation
+
 Optimizer :: struct
 {
     current_proc: ^ProcDef,
@@ -32,6 +38,8 @@ Block :: struct
     predicates, successors: [dynamic]^Edge,
     prev, next: ^Block,
     statements: Statement_List,
+    live_in: [dynamic]^Var_Info,
+    live_out: [dynamic]^Var_Info,
     idx: u64,
 }
 
@@ -49,9 +57,6 @@ Dom_Node :: struct
     children: [dynamic]^Dom_Node,
     block: ^Block,
 }
-
-import "core:reflect"
-import "core:fmt"
 
 opt :: proc(using o: ^Optimizer)
 {
@@ -90,8 +95,12 @@ to_ssa :: proc(using o: ^Optimizer)
     find_frontiers(o);
     init_vars(o);
     insert_phi_nodes(o);
-    // @todo: convert vars to SSA
     convert_vars(o);
+}
+
+allocate_registers :: proc(using o: ^Optimizer)
+{
+    find_live_ranges(o);
 }
 
 print_dom_tree :: proc(using o: ^Optimizer)
@@ -100,16 +109,35 @@ print_dom_tree :: proc(using o: ^Optimizer)
     
     for n in fg.dom_tree
     {
-        if n.father != nil do
+        if n.father != nil 
+        {
             fmt.printf("BB%d -> ", n.father.block.idx);
+        }
         fmt.printf("BB%d:\n\\---[", n.block.idx);
         for c, i in n.children
         {
-            if i != 0 do
+            if i != 0 
+            {
                 fmt.printf(", ");
+            }
             fmt.printf("BB%d", c.block.idx);
         }
         fmt.printf("]\n");
+    }
+}
+
+// allocate_registers subroutines
+find_live_ranges :: proc(using o: ^Optimizer)
+{
+    fg := &current_proc.flow;
+    
+    updated := true;
+    for updated
+    {
+        for b in fg.doms
+        {
+            
+        }
     }
 }
 
@@ -126,8 +154,10 @@ convert_vars :: proc(using o: ^Optimizer)
     {
         for p in node.block.predicates
         {
-            if vars_on_exit[p.from.idx] != nil do
+            if vars_on_exit[p.from.idx] != nil 
+            {
                 copy(var_info, vars_on_exit[p.from.idx]);
+            }
         }
         
         for stmt := node.block.statements.head; stmt != nil; stmt = stmt.next
@@ -276,8 +306,10 @@ next_statement :: proc(block: ^Block, stmt: ^Statement) -> (^Block, ^Statement)
     if stmt_out == nil
     {
         block_out = block.next;
-        if block_out == nil do 
+        if block_out == nil
+        {
             return nil, nil;
+        }
         stmt_out = block_out.statements.head;
     }
     
@@ -287,8 +319,10 @@ next_statement :: proc(block: ^Block, stmt: ^Statement) -> (^Block, ^Statement)
 next_block :: proc(block: ^Block, stmt: ^Statement) -> (^Block, ^Statement)
 {
     block_out := block.next;
-    if block_out == nil do
+    if block_out == nil 
+    {
         return nil, nil;
+    }
     stmt_out := block_out.statements.head;
     return block_out, stmt_out;
 }
@@ -302,8 +336,10 @@ insert_phi_nodes :: proc(using o: ^Optimizer)
         ok: bool;
         for
         {
-            if idx, ok = bitmap_find_first(&phi_candidates); !ok do
+            if idx, ok = bitmap_find_first(&phi_candidates); !ok 
+            {
                 break;
+            }
             bitmap_clear(&phi_candidates, idx);
             block: ^Block;
             for block = current_proc.blocks.head; block.idx != idx; block = block.next {}
@@ -338,8 +374,10 @@ propogate_frontiers :: proc(using o: ^Optimizer, defined_in: ^Bitmap) -> Bitmap
     ok: bool;
     for
     {
-        if idx, ok = bitmap_find_first(&runner); !ok do
+        if idx, ok = bitmap_find_first(&runner); !ok 
+        {
             break;
+        }
         bitmap_clear(&runner, idx);
         for f in fg.frontiers[idx]
         {
@@ -371,34 +409,46 @@ init_vars :: proc(using o: ^Optimizer)
             #partial switch v in stmt.variant
             {
                 case Op:
-                if var, ok := v.dest.(Variable); ok do
+                if var, ok := v.dest.(Variable); ok 
+                {
                     set_var_assigned(var, b, &var_info);
+                }
                 for o in v.operands
                 {
                     if o == nil do continue;
-                    if var, ok := o.(Variable); ok do
+                    if var, ok := o.(Variable); ok 
+                    {
                         set_var_used(var, b, &var_info);
+                    }
                 }
                 
                 case Call:
-                if var, ok := v.dest.(Variable); ok do
+                if var, ok := v.dest.(Variable); ok 
+                {
                     set_var_assigned(var, b, &var_info);
+                }
                 for o in v.args
                 {
-                    if var, ok := o.(Variable); ok do
+                    if var, ok := o.(Variable); ok 
+                    {
                         set_var_used(var, b, &var_info);
+                    }
                 }
                 
                 case CJump:
                 for o in v.ops
                 {
-                    if var, ok := o.(Variable); ok do
+                    if var, ok := o.(Variable); ok 
+                    {
                         set_var_used(var, b, &var_info);
+                    }
                 }
                 
                 case Return:
-                if var, ok := v.var.(Variable); ok do
+                if var, ok := v.var.(Variable); ok 
+                {
                     set_var_used(var, b, &var_info);
+                }
             }
         }
     }
@@ -425,8 +475,10 @@ find_frontiers :: proc(using o: ^Optimizer)
     fg.frontiers = make([][dynamic]^Block, fg.blocks.count);
     for b := fg.blocks.head; b != nil; b = b.next
     {
-        if len(b.predicates) < 2 do
+        if len(b.predicates) < 2 
+        {
             continue;
+        }
         for edge in b.predicates
         {
             pred := edge.from;
@@ -480,8 +532,7 @@ init_dominators :: proc(using o: ^Optimizer)
                 eidx = 0;
                 curr_node = block;
             }
-            if sp == 0 do 
-                break;
+            if sp == 0 do break;
             sp -= 1;
             curr_node, eidx = expand_to_tuple(stack[sp]);
         }
@@ -510,8 +561,10 @@ find_idom :: proc(using o: ^Optimizer, block: ^Block) -> ^Block
     for edge in block.predicates
     {
         pred := edge.from;
-        if fg.doms[pred.idx] == nil do
+        if fg.doms[pred.idx] == nil 
+        {
             continue;
+        }
         if new_idom == nil
         {
             new_idom = pred;
@@ -530,10 +583,14 @@ dom_intersect :: proc(flow: ^Flow_Graph, a, b: ^Block) -> ^Block
     
     for finger1 != finger2
     {
-        for finger1.idx > finger2.idx do
+        for finger1.idx > finger2.idx 
+        {
             finger1 = flow.doms[finger1.idx];
-        for finger2.idx > finger1.idx do
+        }
+        for finger2.idx > finger1.idx 
+        {
             finger2 = flow.doms[finger2.idx];
+        }
     }
     
     return finger1;
@@ -588,13 +645,17 @@ edge_between :: proc(src, dest: ^Block) -> ^Edge
 {
     if len(src.successors) < len(dest.predicates)
     {
-        for e in src.successors do
+        for e in src.successors 
+        {
             if e.to == dest do return e;
+        }
     }
     else
     {
-        for e in dest.predicates do
+        for e in dest.predicates 
+        {
             if e.from == src do return e;
+        }
     }
     return nil;
 }
@@ -650,8 +711,10 @@ trim_labels :: proc(using o: ^Optimizer)
             #partial switch v in stmt.variant
             {
                 case Label:
-                if v.name != dominant_label[block.idx] do
+                if v.name != dominant_label[block.idx] 
+                {
                     remove_statement(&block.statements, stmt);
+                }
             }
         }
     }
@@ -679,8 +742,10 @@ make_blocks :: proc(using o: ^Optimizer, list: Statement_List)
             current_proc.label_to_block[label_index(v.name)] = block;
         }
         
-        if statement_ends_block(stmt) do
+        if statement_ends_block(stmt) 
+        {
             start_new_block = true;
+        }
         
         prev = stmt;
     }
@@ -692,8 +757,10 @@ make_block_and_push :: proc(blocks: ^Block_List, stmts: Statement_List, stmt_hea
     tail.statements = stmts;
     tail.statements.head = stmt_head;
     
-    if blocks.head != nil do
+    if blocks.head != nil 
+    {
         blocks.tail.statements.tail = stmt_head.prev;
+    }
     if stmt_head.prev != nil
     {
         stmt_head.prev.next = nil;

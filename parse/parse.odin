@@ -94,8 +94,10 @@ expect_one :: proc(using parser: ^Parser, kinds: ..Token_Kind) -> Token
     val := peek(parser);
     for k in kinds
     {
-        if val.kind == k do
+        if val.kind == k 
+        {
             return consume(parser);
+        }
     }
     
     fmt.eprintf("%s(%d): ERROR: Expected one of %v, got %v(%q)\n",
@@ -142,8 +144,10 @@ peek :: proc(using parser: ^Parser, idx := 0) -> Token
     for tokens.count <= idx
     {
         val, ok := lex_token(&lexer);
-        for val.kind == .Comment do
+        for val.kind == .Comment
+        {
             val, ok = lex_token(&lexer);
+        }
         ring_add(&tokens, val);
     }
     
@@ -346,8 +350,10 @@ parse_var_decl :: proc(using parser: ^Parser) -> ^Node
         consume(parser);
         
         type: ^Node = nil;
-        if peek(parser).kind != .Colon && peek(parser).kind != .Eq do
+        if peek(parser).kind != .Colon && peek(parser).kind != .Eq
+        {
             type = parse_type(parser);
+        }
         
         rhs: ^Node = nil;
         is_const := false;
@@ -412,8 +418,10 @@ parse_expr_list :: proc(using parser: ^Parser) -> []^Node
 {
     list := make([dynamic]^Node);
     append(&list, parse_expr(parser));
-    for allow(parser, .Comma) do
+    for allow(parser, .Comma) 
+    {
         append(&list, parse_expr(parser));
+    }
     
     return list[:];
 }
@@ -461,8 +469,10 @@ parse_binary_expr :: proc(using parser: ^Parser, max_prec: int) -> ^Node
             else
             {
                 rhs := parse_binary_expr(parser, prec +1);
-                if rhs == nil do
+                if rhs == nil 
+                {
                     syntax_error(op, "Expected expression after binary operator");
+                }
                 expr = make_node(parser, Binary_Expr{op, expr, rhs});
             }
         }
@@ -545,8 +555,10 @@ parse_operand :: proc(using parser: ^Parser) -> ^Node
         }
         expect(parser, .Close_Paren);
         ret: ^Node;
-        if allow(parser, .Arrow) do
+        if allow(parser, .Arrow) 
+        {
             ret = parse_type(parser);
+        }
         
         block := parse_block(parser);
         scope_statement(scope, block);

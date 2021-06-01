@@ -4,8 +4,10 @@ import "core:fmt"
 
 ir_indent :: proc(using emitter: ^Emitter)
 {
-    for i in 0..<indent_level do
+    for i in 0..<indent_level 
+    {
         fmt.printf("    ");
+    }
 }
 
 ir_print :: proc(using emitter: ^Emitter)
@@ -14,10 +16,14 @@ ir_print :: proc(using emitter: ^Emitter)
     {
         ir_print_proc_type(emitter, _proc.decl);
         fmt.printf(" ");
-        if _proc.blocks.count > 0 do
+        if _proc.blocks.count > 0 
+        {
             ir_print_proc_def(emitter, &_proc);
-        else do
+        }
+        else 
+        {
             ir_print_scope(emitter, _proc.scope);
+        }
         fmt.printf("\n\n");
     }
 }
@@ -44,8 +50,10 @@ ir_print_proc_type :: proc(using emitter: ^Emitter, op: ^Operand)
     fmt.printf("$%s(", proc_type.name);
     for p, i in proc_type.params
     {
-        if i != 0 do
+        if i != 0 
+        {
             fmt.printf(", ");
+        }
         ir_print_var(emitter, p);
     }
     fmt.printf(")");
@@ -67,8 +75,10 @@ ir_print_scope :: proc(using emitter: ^Emitter, stmt: ^Statement)
         ir_print_var(emitter, v);
         fmt.printf("\n");
     }
-    if scope.vars != nil do
+    if scope.vars != nil 
+    {
         fmt.printf("\n");
+    }
     for s := scope.statements.head; s != nil; s = s.next
     {
         ir_print_statement(emitter, s);
@@ -103,8 +113,10 @@ ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
         fmt.printf(", [");
         for a, i in v.args
         {
-            if i > 0 do
+            if i > 0 
+            {
                 fmt.printf(", ");
+            }
             ir_print_operand(emitter, a);
         }
         fmt.printf("]]");
@@ -149,8 +161,7 @@ ir_print_statement :: proc(using emitter: ^Emitter, stmt: ^Statement)
         fmt.printf(", [");
         for c, i in v.choices
         {
-            if i != 0 do 
-                fmt.printf(", ");
+            if i != 0 do fmt.printf(", ");
             ir_print_operand(emitter, c);
         }
         fmt.printf("]]");

@@ -77,6 +77,8 @@ bitmap_find_first :: proc(using bmp: ^Bitmap) -> (u64, bool)
 
 bitmap_delete :: proc(using bmp: ^Bitmap)
 {
-    if bits != 0 do
+    if bits != 0 
+    {
         delete(chunks);
+    }
 }
